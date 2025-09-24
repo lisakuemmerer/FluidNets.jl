@@ -1,5 +1,4 @@
-include("/home/lisa/MA/NeuralNetwork/my_functions.jl");
-using StatsBase
+
 
 Trials_all = load_trials("/home/lisa/MA/NeuralNetwork/hyperparameter/Trials.jld2")
 

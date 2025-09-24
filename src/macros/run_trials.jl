@@ -1,4 +1,4 @@
-include("/home/lisa/MA/NeuralNetwork/my_functions.jl");
+
 
 # read in data
 data = readdlm("/home/lisa/MA/Data/Full_PCE/Kernels/pion_thermal_BG.txt", Float64);
