@@ -1,2 +1,2 @@
-# fluid_nets
+# fluid_nets.jl
 Structures to build, train and optimize Neural Networks to recreate Kernelfunctions as used in Fluidum
