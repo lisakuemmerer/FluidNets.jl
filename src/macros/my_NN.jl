@@ -3,7 +3,6 @@ include("/home/lisa/MA/Fluidum/my_main.jl");
 
 
 data = readdlm("/home/lisa/MA/Data/Full_PCE/Kernels/pion_thermal_BG.txt", Float64);
-K_labels = readdlm("/home/lisa/MA/Data/Full_PCE/K_labels.txt")[1:8];
 
 var_set = data[1:4,:];
 K_set = data[5:end,:];
@@ -12,33 +11,6 @@ K_func = extrapolate_interpolate_kernels(var_set, K_set);
 
 
 #####################################################################################################################################################
-
-
-# var_set_sub = var_set[:, var_set[1,:] .<= 2.5]
-# K_set_sub = K_set[:, var_set[1,:] .<= 2.5]
-
-# loss_fct=MyYweightLoss(1e-1),
-# beta=(0.9,0.999), lambda=0.2,
-# adapt_lera=true, lera_trend=0.999, lera_update_step=10,
-
-# OrderedDict{Symbol, Any}
-#     (:prep_vars          => "meanstd"
-#     :prep_K             => "none"
-#     :nb_hl              => 6
-#     :hl_dim             => 264
-#     :act_fct            => "sigmoid"
-#     :initializer_weight => "glorot_uniform"
-#     :initializer_bias   => "random_normal"
-#     :batchsize          => 100
-#     :loss_fct           => "mse"
-#     :lera               => 0.00129155
-#     :beta1              => 0.99
-#     :beta2              => 0.9999
-#     :lambda             => 0.0
-#     :endloss            => 2.31434e-7
-#     :improv             => 0.000834492
-#     :tft                => 10256.5
-#     :overfit            => true)
 
 
 var_train_set, K_train_set, var_test_set, K_test_set, var_prep_pars, K_prep_pars = get_train_test_set(var_set, K_set,
@@ -58,21 +30,10 @@ pl = plot_losses(trainloss, testloss)
 #savefig(pl, String("/home/lisa/MA/NeuralNetwork/pion_4D_BG/" * whichtry * "_learning_curve.png"))
 
 
-Trainstate = reprocess_NN(my_NN, var_prep_pars=var_prep_pars,K_prep_pars=K_prep_pars);
+Trainstate = reprocess_model(my_NN, var_prep_pars=var_prep_pars,K_prep_pars=K_prep_pars);
 #save_model(Trainstate, "/home/lisa/MA/NeuralNetwork/pion_4D_BG/NN.jld2")
 
 
-
-
-
-
-reprocess_NN(my_NN, var_prep_pars=var_prep_pars, K_prep_pars=K_prep_pars)
-
-save_NN(trained_model(4,8,6,256,sigmoid_fast,var_prep_pars, K_prep_pars,my_NN.parameters), "/home/lisa/MA/NeuralNetwork/pion_4D_BG/NN.jld2")
-
-new_NN = load_NN("/home/lisa/MA/NeuralNetwork/pion_4D_BG/NN.jld2")
-
-new_NN.model
 
 
 ################

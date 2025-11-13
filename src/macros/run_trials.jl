@@ -17,16 +17,16 @@ function trial(scen; deepsave=false)
         pv = false
     elseif scen[:prep_vars] == "minwidth"
         pv = get_min_width(var_set)
-    elseif scen[:prep_vars] == "meanhalfwidth"
-        pv = get_mean_halfwidth(var_set)
+    elseif scen[:prep_vars] == "midhalfwidth"
+        pv = get_mid_halfwidth(var_set)
     end
 
     if scen[:prep_K] == "none"
         pk = false
     elseif scen[:prep_K] == "minwidth"
         pk = get_min_width(K_set)
-    elseif scen[:prep_K] == "meanhalfwidth"
-        pk = get_mean_halfwidth(K_set)
+    elseif scen[:prep_K] == "midhalfwidth"
+        pk = get_mid_halfwidth(K_set)
     elseif scen[:prep_K] == "zeroabsmax"
         pk = get_zero_absmax(K_set)
     end
@@ -80,9 +80,9 @@ function trial(scen; deepsave=false)
     if scen[:loss_fct] == "mse"
         lossfct = MSELoss()
     elseif scen[:loss_fct] == "xweight"
-        lossfct = MyXweightLoss(4)
+        lossfct = MyXweightLoss()
     elseif scen[:loss_fct] == "yweight"
-        lossfct = MyYweightLoss(1e-1)
+        lossfct = MyYweightLoss()
     end
 
 
@@ -94,22 +94,23 @@ function trial(scen; deepsave=false)
     nepochs=1000, x_test=var_test_set, y_test=K_test_set, optim_mode=true, messages=false);
 
     # return: dictionary containing used hyperparameters, time for training, testloss, and model_overfit
-    !(deepsave) && (scen[:endloss] = testloss[2][end])
-    !(deepsave) && (scen[:improv] = testloss[2][end]/testloss[2][1])
-    deepsave && (scen[:NN] = my_NN)
-    deepsave && (scen[:trainloss] = trainloss)
-    deepsave && (scen[:testloss] = testloss)
-    scen[:tft] = tft
-    scen[:overfit] = overfit
+    dict = OrderedDict{Symbol,Any}(k=>v for (k,v) in scen)
+    !(deepsave) && (dict[:endloss] = testloss[2][end])
+    !(deepsave) && (dict[:improv] = testloss[2][end]/testloss[2][1])
+    deepsave && (dict[:NN] = my_NN)
+    deepsave && (dict[:trainloss] = trainloss)
+    deepsave && (dict[:testloss] = testloss)
+    dict[:tft] = tft
+    dict[:overfit] = overfit
 
-    return scen
+    return dict
 end
 
 
 # put in hyperparameter options you wish to try
 # if you want to evaluate different hyperparameters you need to adjust the trial function accordingly
-scens = OrderedDict{Symbol, Any}(:prep_vars => ["none", "minwidth", "meanhalfwidth"],
-    :prep_K => ["none", "minwidth", "meanhalfwidth", "zeroabsmax"], 
+scens = Dict{Symbol, Any}(:prep_vars => ["none", "minwidth", "midhalfwidth"],
+    :prep_K => ["none", "minwidth", "midhalfwidth", "zeroabsmax"], 
     :nb_hl => [4,5,6,7], 
     :hl_dim => [32,64,128,264], 
     :act_fct => ["sigmoid", "relu", "leakyrelu_01", "leakyrelu_02"], 
@@ -124,12 +125,12 @@ scens = OrderedDict{Symbol, Any}(:prep_vars => ["none", "minwidth", "meanhalfwid
 
 
 # put in exeptions for combinations of parameter choices that do not make sense
-excepts = [s->s[:loss_fct]=="yweight" && (s[:prep_K]=="meanhalfwidth" || s[:prep_K]=="minwidth"), 
+excepts = [s->s[:loss_fct]=="yweight" && (s[:prep_K]=="midhalfwidth" || s[:prep_K]=="minwidth"), 
     s -> s[:loss_fct]=="xweight" && s[:prep_vars]=="none"];
 
 
-# scens_fast = OrderedDict{Symbol, Any}(:prep_vars => ["none", "minwidth", "meanhalfwidth"],
-#     :prep_K => ["none", "minwidth", "meanhalfwidth", "zeroabsmax"], 
+# scens_fast = Dict{Symbol, Any}(:prep_vars => ["none", "minwidth", "midhalfwidth"],
+#     :prep_K => ["none", "minwidth", "midhalfwidth", "zeroabsmax"], 
 #     :nb_hl => [4], 
 #     :hl_dim => [32], 
 #     :act_fct => ["sigmoid", "relu", "leakyrelu_01", "leakyrelu_02"], 

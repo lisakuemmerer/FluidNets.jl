@@ -1,3 +1,5 @@
+
+
 ##############################################################################################################
 # load data from files:
 # var_set : variables in matrix form  (#vars, #samples)
@@ -56,7 +58,7 @@ end
 # auxfuc to get means&std of a set: 
 # returns tuple of arrays: (means-array, halfwidth-array)
 # form as used for preprocessing to [-1,1]
-function get_mean_halfwidth(set)
+function get_mid_halfwidth(set)
     ranges = get_range(set)
     return ([(r[2]+r[1])/2 for r in ranges], [(r[2]-r[1])/2 for r in ranges])
 end
@@ -76,6 +78,13 @@ function get_zero_absmax(set)
     zero = [0.0 for i in 1:size(set, 1)]
     absmax = [maximum([abs(i) for i in g]) for g in get_range(set)]
     return(zero, absmax)
+end
+
+## auxfuc to get means & std of a set: 
+# returns tuple of arrays: (means-array, std-array)
+# form as used for preprocessing to normalize
+function get_mean_std(set)
+    return (reshape(mean(set , dims=2),:), reshape(std(set , dims=2),:))
 end
 
 
@@ -196,18 +205,39 @@ end
 
 
 
+##############################################################################################################
+# batches
+
+
+function batch_data(x,y,batchsize)
+    
+    shuffled_inds = shuffle(axes(x,2))
+
+    shuffled_x = x[:,shuffled_inds][:,1:size(x,2)-size(x,2)%batchsize]
+    shuffled_y = y[:,shuffled_inds][:,1:size(y,2)-size(y,2)%batchsize]
+
+    reshaped_shuffled_x = reshape(shuffled_x, size(x,1),batchsize,:)
+    reshaped_shuffled_y = reshape(shuffled_y, size(y,1),batchsize,:)
+    D = [(reshaped_shuffled_x[:,:,i], reshaped_shuffled_y[:,:,i]) for i in axes(reshaped_shuffled_x, 3)]
+
+    return D
+end
+
+
+
+
+
 
 ##############################################################################################################
-# stuff to remove ? 
-# get sets based on Interpolation
+# other stuff: get sets based on Interpolation ( might not work anymore ? )
 
 
 # compute random variable set
 # var_range can be array range as in get_range, or variable arrays as in get_vars
 # n: number of samples, rng: random number generator
 # returns random variable set in matrix form (#vars, #samples)
-function compute_var_set(var_range; n=100, rng=def_rng)
-    v_rand = [rand(rng, n)*(v[end]-v[1]) .+ v[1] for v in var_range]
+function compute_var_set(var_range; n=100)
+    v_rand = [rand(n)*(v[end]-v[1]) .+ v[1] for v in var_range]
     return stack(v_rand, dims=1)
 end
 
@@ -216,8 +246,8 @@ end
 # var_range can be array range as in get_range, or variable arrays as in get_vars
 # n: number of samples - each combination is computed. will return n^(#vars) samples
 # returns random variable set in matrix form (#vars, #samples)
-function compute_sorted_var_set(var_range; n=10, rng=def_rng)
-    v_rand = [sort(unique(rand(rng, n)*(v[end]-v[1]) .+ v[1])) for v in var_range]
+function compute_sorted_var_set(var_range; n=10)
+    v_rand = [sort(unique(rand(n)*(v[end]-v[1]) .+ v[1])) for v in var_range]
     return get_set(v_rand)
 end
 
