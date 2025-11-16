@@ -233,7 +233,7 @@ end
 
 
 ##############################################################################################################
-# other stuff: get sets based on Interpolation ( might not work anymore ? )
+# OTHER STUFF: get sets based on Interpolation ( might not work anymore ? )
 
 
 # compute random variable set

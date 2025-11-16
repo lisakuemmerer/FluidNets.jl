@@ -314,7 +314,7 @@ end
 
 
 ##############################################################################################################
-# other stuff: kernelwise ( might not work anymore ? )
+# OTHER STUFF: kernelwise ( might not work anymore ? )
 
 
 function NN_kernelwise(var_train_set, K_train_set, nb_hl, hl_dim; lera=0.001, beta1=0.9, beta2=0.999, lambda=0., loss_fct=MSELoss(), act_fct=leakyrelu, batchsize=500, nepochs=100, update_step=10, x_test=var_train_set, y_test=K_train_set, adapt_lera=false,  lera_trend=0.999, lera_update_step=10, early_stopping=true, messages=true)
