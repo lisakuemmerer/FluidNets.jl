@@ -1,4 +1,4 @@
-
+using FluidNets
 
 Trials_all = load_trials("/home/lisa/MA/NeuralNetwork/hyperparameter/Trials.jld2")
 

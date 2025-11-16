@@ -79,7 +79,7 @@ K_labels = ["Keq1", "Keq2", "Kshear1", "Kshear2", "Kshear3", "Kshear4", "Kbulk1"
 
     
 #function that returns the indices of Kernels of one m-mode
-function modeindex(m)
+function _modeindex(m)
     return [i[1] for i in findall(contains(",$m"), K_labels)].+2
 end
 
@@ -93,7 +93,7 @@ function get_BG_mode_files(particle, which, filepath, outpath)
     files = filter(contains(which), filter(contains(particle_ids[particle]), readdir(filepath)))
     
     # find modes depending on K_labels -> check manually with first line in files if these are right !!!
-    modeindex = [modeindex(j) for j in 0:4]
+    modeindex = [_modeindex(j) for j in 0:4]
 
     K_BG = []
     K_m0 = []
@@ -136,8 +136,8 @@ function get_BG_mode_files(particle, which, filepath, outpath)
     writedlm(String(outpath*String(particle)*"_"*which*"_m4.txt"), hcat(K_m4...))
 end
 
-
-# # example call of function on my structures to get files for pion with resonances --- RUNS FOR LIKE 1h !!!
+# # DO NOT UNCOMMENT UNLESS WANTED, RUNS FOR LIKE 1h !!!
+# # example call of function on my structures to get files for pion with resonances
 # get_BG_mode_files(:pion, "total", "/home/lisa/MA/Data/Full_PCE/Kernels/", "/home/lisa/MA/Data/Full_PCE/modewise/")
 
 

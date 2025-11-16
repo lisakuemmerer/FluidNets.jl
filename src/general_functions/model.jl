@@ -22,9 +22,10 @@ end
 
 
 
+
 ##############################################################################################################
 # custom Loss functions
-eps(eps())
+
 
 # logarithmic loss
 MyLogLoss = GenericLossFunction((ŷ, y) -> (log(abs(ŷ - y)+1)));
@@ -65,8 +66,9 @@ MyXweightLoss() = MyXweightLoss(1)
 ##############################################################################################################
 # custom activation functions
 
-# custom leakyrelu function with differing slope, =relu for a=0
+# custom leakyrelu function with differing slope, = relu for a=0
 leakyrelu_grad(a) = (b->leakyrelu(b,a))
+ReLuTypes = Union{typeof(relu), typeof(leakyrelu), FluidNets.var"#leakyrelu_grad##0#leakyrelu_grad##1"{Float64}}
 
 
 
@@ -75,22 +77,25 @@ leakyrelu_grad(a) = (b->leakyrelu(b,a))
 ##############################################################################################################
 # initializer
 
-
-function gain(act_fct)
-    act_fct == relu && (gain = sqrt(2))
+# calculates the gain corresponding to the activation function according to https://docs.pytorch.org/docs/stable/nn.init.html
+# other activation functions can of course be included
+ActfctswithgainTypes = Union{ReLuTypes, typeof(identity), typeof(sigmoid_fast), typeof(tanh_fast)}
+function _gain(act_fct::ActfctswithgainTypes)
+    act_fct isa ReLuTypes && (gain = sqrt(2/(1+act_fct(-1)^2)))
     act_fct == identity && (gain = 1)
     act_fct == sigmoid_fast && (gain = 1)
-    act_fct == leakyrelu && (gain = sqrt(2/(1+0.1^2)))
-    act_fct == leakyrelu_grad(0.2) && (gain = sqrt(2/(1+0.2^2)))
+    act_fct == tanh_fast && (gain = 5/3)
     return gain
 end
 
 
-function initializer_gain(initializer, act_fct)
-    init_with_gain(rng, dims...) = initializer(rng, dims...; gain=gain(act_fct))
+# gives the initializer with the correct gain depending on the activation function
+# other initializers can be included of course
+InitswithgainTypes = Union{typeof(kaiming_uniform), typeof(kaiming_normal), typeof(glorot_uniform), typeof(glorot_normal)}
+function _initializer_gain(initializer::InitswithgainTypes, act_fct::ActfctswithgainTypes)
+    init_with_gain(rng, dims...) = initializer(rng, dims...; gain=_gain(act_fct))
     return init_with_gain
 end 
-
 
 
 
@@ -107,6 +112,12 @@ end
 # hl_weight, hl_bias, inp_weight, inp_bias, out_weight, out_bias=initialization of weights and biases in respective layers
 function initiate_model(inp_dim, out_dim; nb_hl=5, hl_dim=32, act_fct=relu, in_act_fct=identity, out_act_fct=identity, param64=true,
                     hl_weight=nothing, hl_bias=nothing, inp_weight=nothing, inp_bias=nothing, out_weight=nothing, out_bias=nothing)
+
+    # make sure weigts are initialized according to activation function
+    hl_weight isa InitswithgainTypes && act_fct isa ActfctswithgainTypes && (hl_weight = _initializer_gain(hl_weight, act_fct))
+    inp_weight isa InitswithgainTypes && in_act_fct isa ActfctswithgainTypes && (inp_weight = _initializer_gain(inp_weight, in_act_fct))
+    out_weight isa InitswithgainTypes && out_act_fct isa ActfctswithgainTypes && (out_weight = _initializer_gain(out_weight, out_act_fct))
+
 
     # make chain of hidden layers
     hidden_layers = []
@@ -169,7 +180,7 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
 
         # train step: update on every batch in dataloader, batch loss is output 2
         # mean over whole dataset, append epoch & trainloss
-        epoch_train_loss = mean([Training.single_train_step!(AutoZygote(), loss_fct, (xbatch, ybatch), train_state)[2] for (xbatch, ybatch) in batch_data(x,y,batchsize)])
+        epoch_train_loss = mean([Training.single_train_step!(AutoZygote(), loss_fct, (xbatch, ybatch), train_state)[2] for (xbatch, ybatch) in _batch_data(x,y,batchsize)])
         push!(train_loss[2], epoch_train_loss)
         push!(train_loss[1], i)
 

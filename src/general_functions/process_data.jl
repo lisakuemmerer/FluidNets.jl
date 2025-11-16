@@ -12,6 +12,10 @@ function read_data(file, var_dim, K_dim)
 
     data = readdlm(file, Float64);
 
+    if var_dim+K_dim != size(data,1)
+        @warn "number of variables or kernels wrong?"
+    end
+
     var_set = data[1:var_dim,:];
     K_set = data[var_dim+1:var_dim+K_dim,:];
 
@@ -29,13 +33,13 @@ end
 
 # auxfuc to get unique variables in vector form
 # returns array (number of variables) with arrays (number of unique values in variable)
-function get_vars(var_set)
+function _get_vars(var_set)
     return [unique(var_set[i,:]) for i in axes(var_set,1)]
 end
 
 # auxfunc to return vars to matrix form with every combination of variables 
 # result: matrix in order, first variable rises first
-function get_set(vars)
+function _get_set(vars)
     reshape([r[i] for r in [i for i in Iterators.product(vars...)] for i in eachindex(vars)],length(vars),:)
 end
 
@@ -50,16 +54,16 @@ end
 
 # auxfuc to get ranges of sets
 # returns array (number of variables) of tuples (min, max) of each variable
-function get_range(set)
+function _get_range(set)
     return [(minimum(set[i,:]),maximum(set[i,:])) for i in axes(set,1)]
 end
 
 
 # auxfuc to get means&std of a set: 
-# returns tuple of arrays: (means-array, halfwidth-array)
+# returns tuple of arrays: (mid-array, halfwidth-array)
 # form as used for preprocessing to [-1,1]
 function get_mid_halfwidth(set)
-    ranges = get_range(set)
+    ranges = _get_range(set)
     return ([(r[2]+r[1])/2 for r in ranges], [(r[2]-r[1])/2 for r in ranges])
 end
 
@@ -67,7 +71,7 @@ end
 # returns tuple of arrays: (mins-array, widths-array)
 # form as used for preprocessing to [0,1]
 function get_min_width(set)
-    ranges = get_range(set)
+    ranges = _get_range(set)
     return ([r[1] for r in ranges], [(r[2]-r[1]) for r in ranges])
 end
 
@@ -76,7 +80,7 @@ end
 # form as used for preprocessing to maximal range in (-1,1) without shifting zero (low values)
 function get_zero_absmax(set) 
     zero = [0.0 for i in 1:size(set, 1)]
-    absmax = [maximum([abs(i) for i in g]) for g in get_range(set)]
+    absmax = [maximum([abs(i) for i in g]) for g in _get_range(set)]
     return(zero, absmax)
 end
 
@@ -117,7 +121,7 @@ function preprocess(set; prep_pars=nothing)
 end
 
 # reprocess set x with given parameters prep_pars
-function reprocess(prep, prep_pars)
+function _reprocess(prep, prep_pars)
     x = copy(prep)
     for i in axes(prep,1)
         x[i,:] = prep[i,:]*prep_pars[2][i] .+ prep_pars[1][i]
@@ -136,7 +140,7 @@ end
 
 # compute array of extrapolated kernel functions
 function extrapolate_interpolate_kernels(var_set, K_set)
-    vars = get_vars(var_set)
+    vars = _get_vars(var_set)
     K_interpol = [interpolate(Tuple(vars), reshape(K_set[i,:], Tuple([length(v) for v in vars])), Gridded(Linear()) ) for i in axes(K_set,1)]
     K_func = extrapolate.(K_interpol, Ref(Linear()))
     return K_func 
@@ -209,7 +213,7 @@ end
 # batches
 
 
-function batch_data(x,y,batchsize)
+function _batch_data(x,y,batchsize)
     
     shuffled_inds = shuffle(axes(x,2))
 
@@ -233,7 +237,7 @@ end
 
 
 # compute random variable set
-# var_range can be array range as in get_range, or variable arrays as in get_vars
+# var_range can be array range as in _get_range, or variable arrays as in _get_vars
 # n: number of samples, rng: random number generator
 # returns random variable set in matrix form (#vars, #samples)
 function compute_var_set(var_range; n=100)
@@ -243,12 +247,12 @@ end
 
 
 # compute sorted variable set (grid)
-# var_range can be array range as in get_range, or variable arrays as in get_vars
+# var_range can be array range as in _get_range, or variable arrays as in _get_vars
 # n: number of samples - each combination is computed. will return n^(#vars) samples
 # returns random variable set in matrix form (#vars, #samples)
 function compute_sorted_var_set(var_range; n=10)
     v_rand = [sort(unique(rand(n)*(v[end]-v[1]) .+ v[1])) for v in var_range]
-    return get_set(v_rand)
+    return _get_set(v_rand)
 end
 
 
@@ -270,7 +274,7 @@ end
 
 # compute two random sets from extrapolated kernels
 # preprocess true/false
-# prep_range: range to preprocess on, can be given as get_range(set) for normal. on (0,1) for given set-range
+# prep_range: range to preprocess on, can be given as _get_range(set) for normal. on (0,1) for given set-range
 # if no prep range is given, but preprocess=true, normalization on ranges of train/testset is used for kernels, var_range is used for variables
 # K_scale: extra weight on kernels, #kernel-dim. array or scalar
 # n_train, n_test: number of samples in train/test set

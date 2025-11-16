@@ -1,15 +1,20 @@
 
 
-# read in data
-data = readdlm("/home/lisa/MA/Data/Full_PCE/Kernels/pion_thermal_BG.txt", Float64);
+##############################################################################################################
+# This script allows to run hyperparameter optimization.
+# the 'trial' function will be called for different options defined below by the 'trials' function
 
-var_set = data[1:4,:];
-K_set = data[5:end,:];
+
+
+# read in data
+var_set, K_set = read_data("/home/lisa/MA/Data/Full_PCE/Kernels/pion_thermal_BG.txt", 4, 8);
+
 
 ################################################################################################################
 
 # run one training with given hyperparameters defined in scen
 # hyperparameters need to be correctly unpacked or put in at correct argument
+# this function can be customized according to which hyperparameters should be tested
 function trial(scen; deepsave=false)
 
     # unpack preprocessing parameters
@@ -36,7 +41,7 @@ function trial(scen; deepsave=false)
         actfct = sigmoid_fast
     elseif scen[:act_fct]  == "relu"
         actfct = relu
-    elseif scen[:act_fct]  == "leakyrelu_01"
+    elseif scen[:act_fct]  == "leakyrelu_001"
         actfct = leakyrelu
     elseif scen[:act_fct]  == "leakyrelu_02"
         actfct = leakyrelu_grad(0.2)
@@ -44,13 +49,13 @@ function trial(scen; deepsave=false)
 
     # unpack initializers for weights in hidden layers
     if scen[:initializer_weight] == "glorot_normal"
-        initializer_weight = initializer_gain(glorot_normal, actfct)
+        initializer_weight = glorot_normal
     elseif scen[:initializer_weight] == "glorot_uniform"
-        initializer_weight = initializer_gain(glorot_uniform, actfct)
+        initializer_weight = glorot_uniform
     elseif scen[:initializer_weight] == "kaiming_normal"
-        initializer_weight = initializer_gain(kaiming_normal, actfct)      
+        initializer_weight = kaiming_normal     
     elseif scen[:initializer_weight] == "kaiming_uniform"
-        initializer_weight = initializer_gain(kaiming_uniform, actfct)
+        initializer_weight = kaiming_uniform
     elseif scen[:initializer_weight] == "random_normal"
         initializer_weight = randn32
     elseif scen[:initializer_weight] == "random_uniform"
@@ -61,13 +66,13 @@ function trial(scen; deepsave=false)
 
     # unpack initializers for biases in hidden layers
     if scen[:initializer_bias] == "glorot_normal"
-        initializer_bias = initializer_gain(glorot_normal, actfct)
+        initializer_bias = glorot_normal
     elseif scen[:initializer_bias] == "glorot_uniform"
-        initializer_bias = initializer_gain(glorot_uniform, actfct)
+        initializer_bias = glorot_uniform
     elseif scen[:initializer_bias] == "kaiming_normal"
-        initializer_bias = initializer_gain(kaiming_normal, actfct)      
+        initializer_bias = kaiming_normal
     elseif scen[:initializer_bias] == "kaiming_uniform"
-        initializer_bias = initializer_gain(kaiming_uniform, actfct)
+        initializer_bias = kaiming_uniform
     elseif scen[:initializer_bias] == "random_normal"
         initializer_bias = randn32
     elseif scen[:initializer_bias] == "random_uniform"
@@ -109,11 +114,12 @@ end
 
 # put in hyperparameter options you wish to try
 # if you want to evaluate different hyperparameters you need to adjust the trial function accordingly
+# functions can not be saved correctly, which is why their options should be saved as string and get unpacked correctly in the trial-function
 scens = Dict{Symbol, Any}(:prep_vars => ["none", "minwidth", "midhalfwidth"],
     :prep_K => ["none", "minwidth", "midhalfwidth", "zeroabsmax"], 
     :nb_hl => [4,5,6,7], 
     :hl_dim => [32,64,128,264], 
-    :act_fct => ["sigmoid", "relu", "leakyrelu_01", "leakyrelu_02"], 
+    :act_fct => ["sigmoid", "relu", "leakyrelu_001", "leakyrelu_02"], 
     :initializer_weight => ["glorot_normal", "glorot_uniform", "kaiming_normal", "kaiming_uniform", "random_normal", "random_uniform", "nothing"],
     :initializer_bias => ["glorot_normal", "glorot_uniform", "kaiming_normal", "kaiming_uniform", "random_normal", "random_uniform", "nothing"],
     :batchsize => [100,500,1000,5000], 
@@ -145,9 +151,9 @@ excepts = [s->s[:loss_fct]=="yweight" && (s[:prep_K]=="midhalfwidth" || s[:prep_
 
 
 
-# run trials. tis take a long time!
-# function will call trial
-trial_all = trials(scens, excepts=excepts, num_trials=2);
+# # DO NOT UNCOMMENT UNLESS WANTED, RUNS FOR MULTIPLE HOURS !!!
+# # function will call trial-function and run #num_trials options from scen without excepts
+# trial_all = trials(scens, excepts=excepts, num_trials=2);
 
 
 # save the trials

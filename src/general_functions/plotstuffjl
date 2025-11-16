@@ -1,8 +1,20 @@
 
 
+##############################################################################################################
+# losses
+
+function plot_losses(trainloss, testloss)
+    p = plot(trainloss[1], trainloss[2], yaxis=:log, label="Trainloss", xlabel="Epoch", ylabel="Loss")
+    plot!(p, testloss[1], testloss[2], yaxis=:log, label="Testloss")
+    return p
+end
 
 
 
+
+
+##############################################################################################################
+# 
 
 
 
@@ -24,17 +36,13 @@ function Z_matrix(XYZ)
 end
 
 
-function plot_losses(trainloss, testloss)
-    p = plot(trainloss[1], trainloss[2], yaxis=:log, label="Trainloss", xlabel="Epoch", ylabel="Loss")
-    plot!(p, testloss[1], testloss[2], yaxis=:log, label="Testloss")
-    return p
-end
+
 
 
 
 # usable only on sorted sets, plots one kernel in 2d
 function plot_sorted_kernel_2d(var_set, K_set, i; labels = ["pT", "uʳ"], title="")
-    vars = get_vars(var_set)
+    vars = _get_vars(var_set)
     return plot(vars[2],vars[1], reshape(K_set, (size(K_set)[1],length(vars[1]),length(vars[2])))[i,:,:], title=title, xlabel=labels[2], ylabel=labels[1], st=:surface, legend=:none)
 end 
 
@@ -53,7 +61,7 @@ end
 
 
 function plot_sorted_kernels_ptur(var_set, K_set, K_labels; Tc_ind=1, Tk_ind=1, title="")
-    vars = get_vars(var_set)
+    vars = _get_vars(var_set)
     ptur_dim = length(vars[1]) * length(vars[2])
 
     Tc_dim = length(vars) >=3 ? length(vars[3]) : 1
@@ -73,7 +81,7 @@ end
 
 
 function plot_sorted_kernels_temps(var_set, K_set, K_labels; pt_ind=1, ur_ind=1, title="")
-    vars = get_vars(var_set)
+    vars = _get_vars(var_set)
     var_dim = size(var_set)[2]
     pt_dim = length(vars[1])
     ptur_dim = length(vars[1]) * length(vars[2])
@@ -194,7 +202,7 @@ end
 
 
 function compare_kernels_PCE_ptur(var_set, K_func, trainstate, Tc, Tk; n=20)
-    var_val_set_ptur = get_sorted_var_set(get_range(var_set[1:2,:]), n=n)
+    var_val_set_ptur = get_sorted_var_set(_get_range(var_set[1:2,:]), n=n)
     var_val_set_tc = transpose([Tc for i in 1:n*n])
     var_val_set_tk = transpose([Tk for i in 1:n*n])
     var_val_set = vcat(var_val_set_ptur, var_val_set_tc, var_val_set_tk)
@@ -209,7 +217,7 @@ end
 
 
 function compare_kernels_PCE_temps(var_set, K_func, trainstate, pt, ur; n=20)
-    var_val_set_temps = get_sorted_var_set(get_range(var_set[3:4,:]), n=n)
+    var_val_set_temps = get_sorted_var_set(_get_range(var_set[3:4,:]), n=n)
     var_val_set_pt = transpose([pt for i in 1:n*n])
     var_val_set_ur = transpose([ur for i in 1:n*n])
     var_val_set = vcat( var_val_set_pt, var_val_set_ur, var_val_set_temps)

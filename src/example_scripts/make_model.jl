@@ -1,13 +1,15 @@
-include("/home/lisa/MA/NeuralNetwork/my_functions.jl");
-include("/home/lisa/MA/Fluidum/my_main.jl");
+#include("/home/lisa/MA/NeuralNetwork/my_functions.jl");
+#include("/home/lisa/MA/Fluidum/my_main.jl");
+
+using FluidNets
+using Lux
 
 
-data = readdlm("/home/lisa/MA/Data/Full_PCE/Kernels/pion_thermal_BG.txt", Float64);
 
-var_set = data[1:4,:];
-K_set = data[5:end,:];
 
-K_func = extrapolate_interpolate_kernels(var_set, K_set);
+var_set, K_set = read_data("/home/lisa/MA/Data/Full_PCE/Kernels/pion_thermal_BG.txt", 4, 8);
+
+#K_func = extrapolate_interpolate_kernels(var_set, K_set);
 
 
 #####################################################################################################################################################
@@ -18,7 +20,7 @@ preprocess_vars=get_mean_std(var_set), preprocess_K=false, n_train=10000, n_test
 
 
 my_NN = initiate_model(4, 8, nb_hl=6, hl_dim=256, act_fct=sigmoid_fast, 
-hl_weight=initializer_gain(glorot_uniform, sigmoid_fast), hl_bias=randn32);
+hl_weight=glorot_uniform, hl_bias=randn32);
 
 
 
@@ -26,12 +28,20 @@ my_NN, trainloss, testloss = train_model!(var_train_set, K_train_set, my_NN, ler
 batchsize=100, nepochs=10, early_stopping=true, x_test=var_test_set, y_test=K_test_set, loss_fct=MSELoss());
 
 
+MY_NN = reprocess_model(my_NN, var_prep_pars=var_prep_pars,K_prep_pars=K_prep_pars);
+#save_model(Trainstate, "/home/lisa/MA/NeuralNetwork/pion_4D_BG/NN.jld2")
+
+
+
+#############
+
+
+
 pl = plot_losses(trainloss, testloss)
 #savefig(pl, String("/home/lisa/MA/NeuralNetwork/pion_4D_BG/" * whichtry * "_learning_curve.png"))
 
 
-Trainstate = reprocess_model(my_NN, var_prep_pars=var_prep_pars,K_prep_pars=K_prep_pars);
-#save_model(Trainstate, "/home/lisa/MA/NeuralNetwork/pion_4D_BG/NN.jld2")
+
 
 
 
