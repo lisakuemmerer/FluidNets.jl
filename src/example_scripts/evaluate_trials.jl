@@ -28,6 +28,33 @@ best_endloss = argmin(x->x[:endloss], Trials_all)
 best_improv = argmin(x->x[:improv], Trials_all)
 
 
+##############################################################################################################
+# variable stuff
+
+
+function Z_matrix(XYZ)
+    x_vals = sort(unique(v[1] for v in XYZ))
+    y_vals = sort(unique(v[2] for v in XYZ))
+    nx, ny = length(x_vals), length(y_vals)
+
+    x_idx = Dict(p => i for (i,p) in enumerate(x_vals))
+    y_idx = Dict(p => i for (i,p) in enumerate(y_vals))
+
+    Z = fill(NaN, ny, nx)
+
+    for (x,y,z) in XYZ
+        Z[y_idx[y], x_idx[x]] = z
+    end
+
+    return x_vals, y_vals, Z
+end
+
+
+
+
+
+
+
 #####################################################################################################################
 #test percentage in first --- entries:
 

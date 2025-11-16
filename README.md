@@ -16,4 +16,4 @@ example scripts that define special functions that might have to be customized.
 3) example_scripts
 tutorial-like scripts that use the general function. Can be used as introduction or general workflow.
 'make_model' contains a structure on how to build a neural network.
-'evaluate_trials' gives some ideas on how to optimize the trials run in hyperparameter optimization.
+'evaluate_trials' - work in progress

@@ -23,9 +23,6 @@ include("general_functions/plotstuff.jl")
 include("customized_scripts/get_files.jl")
 include("customized_scripts/run_trials.jl")
 
-#include("example_scripts/make_model.jl")
-#include("example_scripts/evaluate_trials.jl")
-
 
 
 export model_structure, model_structures, initiate_model, train_model!, reprocess_model, save_model, load_model
