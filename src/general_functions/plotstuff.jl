@@ -3,6 +3,7 @@
 ##############################################################################################################
 # losses
 
+
 function plot_losses(trainloss, testloss)
     p = plot(trainloss[1], trainloss[2], yaxis=:log, label="Trainloss", xlabel="Epoch", ylabel="Loss")
     plot!(p, testloss[1], testloss[2], yaxis=:log, label="Testloss")
@@ -14,8 +15,7 @@ end
 
 
 ##############################################################################################################
-# 
-
+# variable stuff
 
 
 function Z_matrix(XYZ)
@@ -39,27 +39,38 @@ end
 
 
 
+##############################################################################################################
+# plot BG kernels of 2D data
 
-# usable only on sorted sets, plots one kernel in 2d
-function plot_sorted_kernel_2d(var_set, K_set, i; labels = ["pT", "uʳ"], title="")
+
+# plots one kernel in 2d, usable only on sorted (on a grid) sets, 
+function _plot_sorted_kernel_2d(var_set, K_set, i; labels = ["pT", "uʳ"], title="")
     vars = _get_vars(var_set)
     return plot(vars[2],vars[1], reshape(K_set, (size(K_set)[1],length(vars[1]),length(vars[2])))[i,:,:], title=title, xlabel=labels[2], ylabel=labels[1], st=:surface, legend=:none)
 end 
 
-# usable on every set, takes long on big sets
-function plot_kernel_2d(var_set, K_set, i; labels = ["pT", "uʳ"], title="")
+
+# same, but usable on every set, takes long on big sets
+function _plot_kernel_2d(var_set, K_set, i; labels = ["pT", "uʳ"], title="")
     return plot(var_set[2,:], var_set[1,:], K_set[i,:], title=title, xlabel=labels[2], ylabel=labels[1], st=:scatter, legend=:none)
 end
 
 
-function plot_sorted_kernels_2d(var_set, K_set, K_labels; labels = ["pT", "uʳ"], title="")
-    p = [plot_sorted_kernel_2d(var_set, K_set, i, title=K_labels[i], labels=labels) for i in axes(K_set,1)]
+# plots 8 kernels in 2d
+function _plot_sorted_kernels_2d(var_set, K_set, K_labels; labels = ["pT", "uʳ"], title="")
+    p = [_plot_sorted_kernel_2d(var_set, K_set, i, title=K_labels[i], labels=labels) for i in axes(K_set,1)]
     return plot(p..., layout=(2,4), size=(2000,1000), plot_title=title)
 end
 
 
 
 
+
+##############################################################################################################
+# plot BG kernels of 4D data
+
+
+#plots 8 kernels in 2d (pt,ur) given indices for Tchem & Tkin, prints according temperatures
 function plot_sorted_kernels_ptur(var_set, K_set, K_labels; Tc_ind=1, Tk_ind=1, title="")
     vars = _get_vars(var_set)
     ptur_dim = length(vars[1]) * length(vars[2])
@@ -76,10 +87,11 @@ function plot_sorted_kernels_ptur(var_set, K_set, K_labels; Tc_ind=1, Tk_ind=1, 
     plot_var_set = var_set[1:2,1+temp_ind:ptur_dim+temp_ind]
     plot_K_set = K_set[:,1+temp_ind:ptur_dim+temp_ind]
 
-    return plot_sorted_kernels_2d(plot_var_set, plot_K_set, K_labels, title=title)
+    return _plot_sorted_kernels_2d(plot_var_set, plot_K_set, K_labels, title=title)
 end
 
 
+#plots 8 kernels in 2d (Tchem, Tkin) given indices for pt,ur, prints according pt,ur
 function plot_sorted_kernels_temps(var_set, K_set, K_labels; pt_ind=1, ur_ind=1, title="")
     vars = _get_vars(var_set)
     var_dim = size(var_set)[2]
@@ -102,12 +114,59 @@ function plot_sorted_kernels_temps(var_set, K_set, K_labels; pt_ind=1, ur_ind=1,
     plot_var_set = hcat([var_set[3:4,i] for i in ptur_ind]...)
     plot_K_set = hcat([K_set[:,i] for i in ptur_ind]...)
 
-    return plot_sorted_kernels_2d(plot_var_set, plot_K_set, K_labels, labels=["Tchem", "Tkin"], title=title)
+    return _plot_sorted_kernels_2d(plot_var_set, plot_K_set, K_labels, labels=["Tchem", "Tkin"], title=title)
 end
 
 
 
-# compare all kernel predictions #vs=[var_set, vars_test_set], Ks = [K_set, K_test_set]
+
+
+##############################################################################################################
+# comparison of prediction & interpolation of 4d data, BG kernels
+
+
+# compare prediction and interpolation for 8 kernels in pt,ur given values for Tchem, Tkin
+# returns 8k for interpol, pred & ratio
+function compare_kernels_ptur(var_set, K_func, trainstate, Tc, Tk; n=20)
+    var_val_set_ptur = compute_sorted_var_set(_get_range(var_set[1:2,:]), n=n)
+    var_val_set_tc = transpose([Tc for i in 1:n*n])
+    var_val_set_tk = transpose([Tk for i in 1:n*n])
+    var_val_set = vcat(var_val_set_ptur, var_val_set_tc, var_val_set_tk)
+    K_val_set = Kernels(var_val_set, K_func)
+    K_val_NN, _ = Lux.apply(trainstate.model, var_val_set, trainstate.parameters, trainstate.states)
+
+    p1 = plot_sorted_kernels_ptur(var_val_set, K_val_set, K_labels, title="true kernels");
+    p2 = plot_sorted_kernels_ptur(var_val_set, K_val_NN, K_labels, title="NN kernels");
+    p3 = plot_sorted_kernels_ptur(var_val_set, K_val_NN ./K_val_set, K_labels, title="NN / true");
+    return plot(p1,p2,p3, layout=(3,1), size=(2000,3000))
+end
+
+
+# compare prediction and interpolation for 8 kernels in Tchem, Tkin given values for pt, ur
+# returns 8k for interpol, pred & ratio
+function compare_kernels_temps(var_set, K_func, trainstate, pt, ur; n=20)
+    var_val_set_temps = get_sorted_var_set(_get_range(var_set[3:4,:]), n=n)
+    var_val_set_pt = transpose([pt for i in 1:n*n])
+    var_val_set_ur = transpose([ur for i in 1:n*n])
+    var_val_set = vcat( var_val_set_pt, var_val_set_ur, var_val_set_temps)
+    K_val_set = Kernels(var_val_set, K_func)
+    K_val_NN, _ = Lux.apply(trainstate.model, var_val_set, trainstate.parameters, trainstate.states)
+
+    p1 = plot_sorted_kernels_temps(var_val_set, K_val_set, K_labels, title="true kernels");
+    p2 = plot_sorted_kernels_temps(var_val_set, K_val_NN, K_labels, title="NN kernels");
+    p3 = plot_sorted_kernels_temps(var_val_set, K_val_NN ./K_val_set, K_labels, title="NN / true");
+    return plot(p1,p2,p3, layout=(3,1), size=(2000,3000))
+end
+
+
+
+
+
+##############################################################################################################
+# OTHER STUFF: compare kernels of 2 sets on 2d data; might not work anymore
+
+
+# compares one kernel predictions #vs=[var_set, vars_test_set], Ks = [K_set, K_test_set]
 function compare_two_kernels_2d(vs, Ks, i; validation=false, loss=MSELoss(), labels=nothing, var_labels=["pT", "uʳ"])
     nb_plots = length(Ks)
     if labels===nothing
@@ -117,9 +176,9 @@ function compare_two_kernels_2d(vs, Ks, i; validation=false, loss=MSELoss(), lab
     plots = []
     for j in 1:nb_plots
         if validation
-            p = plot_sorted_kernel_2d(vs[j], Ks[j], i, labels=var_labels)
+            p = _plot_sorted_kernel_2d(vs[j], Ks[j], i, labels=var_labels)
         else
-            p = plot_kernel_2d(vs[j], Ks[j], i, labels=var_labels)
+            p = _plot_kernel_2d(vs[j], Ks[j], i, labels=var_labels)
         end
         plot!(p, title=labels[j])
         push!(plots, p)
@@ -133,7 +192,8 @@ function compare_two_kernels_2d(vs, Ks, i; validation=false, loss=MSELoss(), lab
 end
 
 
-
+# compare kernel prediction to interpolation in 1d (pt), given ur
+# runs through plot for each kernel
 function show_kernels_pt(pt_range, K_func, trainstate; ur=0., plotlog=false)
     pt = sort(rand(200)*(pt_range[end]-pt_range[1]) .+ pt_range[1])
     ur = ones64(length(pt))*ur
@@ -155,6 +215,8 @@ function show_kernels_pt(pt_range, K_func, trainstate; ur=0., plotlog=false)
 end
 
 
+# compare kernel prediction to interpolation in 1d (ur), given pt
+# runs through plot for each kernel
 function show_kernels_ur(ur_range, K_func, trainstate; pt=0., plotlog=false)
     ur = sort(rand(200)*(ur_range[end]-ur_range[1]) .+ ur_range[1])
     pt = ones64(length(ur))*pt
@@ -176,8 +238,9 @@ function show_kernels_ur(ur_range, K_func, trainstate; pt=0., plotlog=false)
 end
 
 
-
-
+# compare kernel prediction to interpolation in 1d (pt), given ur index
+# used on precomputed sorted validation set (should be somewhere in process_data)
+# runs through plot for each kernel
 function show_sorted_kernels_pt(var_val_set, K_val_set, K_val_NN; ur_index=1, plotlog=false)
     n = axes(unique(var_val_set[1,:]),1)
     ur=ur_index-1
@@ -196,38 +259,5 @@ function show_sorted_kernels_pt(var_val_set, K_val_set, K_val_NN; ur_index=1, pl
 end
 
 
-################### PCE plots #######################
-
-
-
-
-function compare_kernels_PCE_ptur(var_set, K_func, trainstate, Tc, Tk; n=20)
-    var_val_set_ptur = get_sorted_var_set(_get_range(var_set[1:2,:]), n=n)
-    var_val_set_tc = transpose([Tc for i in 1:n*n])
-    var_val_set_tk = transpose([Tk for i in 1:n*n])
-    var_val_set = vcat(var_val_set_ptur, var_val_set_tc, var_val_set_tk)
-    K_val_set = Kernels(var_val_set, K_func)
-    K_val_NN, _ = Lux.apply(trainstate.model, var_val_set, trainstate.parameters, trainstate.states)
-
-    p1 = plot_sorted_kernels_ptur(var_val_set, K_val_set, K_labels, title="true kernels");
-    p2 = plot_sorted_kernels_ptur(var_val_set, K_val_NN, K_labels, title="NN kernels");
-    p3 = plot_sorted_kernels_ptur(var_val_set, K_val_NN ./K_val_set, K_labels, title="NN / true");
-    return plot(p1,p2,p3, layout=(3,1), size=(2000,3000))
-end
-
-
-function compare_kernels_PCE_temps(var_set, K_func, trainstate, pt, ur; n=20)
-    var_val_set_temps = get_sorted_var_set(_get_range(var_set[3:4,:]), n=n)
-    var_val_set_pt = transpose([pt for i in 1:n*n])
-    var_val_set_ur = transpose([ur for i in 1:n*n])
-    var_val_set = vcat( var_val_set_pt, var_val_set_ur, var_val_set_temps)
-    K_val_set = Kernels(var_val_set, K_func)
-    K_val_NN, _ = Lux.apply(trainstate.model, var_val_set, trainstate.parameters, trainstate.states)
-
-    p1 = plot_sorted_kernels_temps(var_val_set, K_val_set, K_labels, title="true kernels");
-    p2 = plot_sorted_kernels_temps(var_val_set, K_val_NN, K_labels, title="NN kernels");
-    p3 = plot_sorted_kernels_temps(var_val_set, K_val_NN ./K_val_set, K_labels, title="NN / true");
-    return plot(p1,p2,p3, layout=(3,1), size=(2000,3000))
-end
 
 
