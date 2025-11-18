@@ -141,7 +141,7 @@ end
 # get_BG_mode_files(:pion, "total", "/home/lisa/MA/Data/Full_PCE/Kernels/", "/home/lisa/MA/Data/Full_PCE/modewise/")
 
 
-
+export particle_ids, K_labels, get_BG_mode_files
 
 
 

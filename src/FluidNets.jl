@@ -12,6 +12,7 @@ using Statistics
 using Functors
 using DataStructures
 using StatsBase
+using Fluidum
 
 include("general_functions/model.jl")
 include("general_functions/process_data.jl")
@@ -22,6 +23,7 @@ include("general_functions/plotstuff.jl")
 # custom scripts - not necessary
 include("customized_scripts/get_files.jl")
 include("customized_scripts/run_trials.jl")
+include("customized_scripts/minifluidum.jl")
 
 
 
@@ -31,11 +33,6 @@ export extrapolate_interpolate_kernels, Kernels
 export MyXweightLoss, MyYweightLoss, leakyrelu_grad
 export trials, run_all_trials, save_trials, load_trials, merge_trials
 export plot_losses, plot_sorted_kernels_ptur, plot_sorted_kernels_temps, compare_kernels_ptur, compare_kernels_temps
-
-
-# custom scripts - not necessary
-export particle_ids, K_labels, get_BG_mode_files
-export trial, scen, excepts
 
 
 

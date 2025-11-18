@@ -159,3 +159,5 @@ excepts = [s->s[:loss_fct]=="yweight" && (s[:prep_K]=="midhalfwidth" || s[:prep_
 # save the trials
 #save_trials(trial_all, "/home/lisa/MA/NeuralNetwork/hyperparameter/testtrial.jld2");
 
+export trial, scen, excepts
+

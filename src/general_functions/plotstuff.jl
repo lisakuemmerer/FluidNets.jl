@@ -46,7 +46,7 @@ end
 
 
 #plots 8 kernels in 2d (pt,ur) given indices for Tchem & Tkin, prints according temperatures
-function plot_sorted_kernels_ptur(var_set, K_set, K_labels; Tc_ind=1, Tk_ind=1, title="")
+function plot_sorted_kernels_ptur(var_set, K_set, K_labels; Tc_ind=1, Tk_ind=1, title="", printout=true)
     vars = _get_vars(var_set)
     ptur_dim = length(vars[1]) * length(vars[2])
 
@@ -57,7 +57,7 @@ function plot_sorted_kernels_ptur(var_set, K_set, K_labels; Tc_ind=1, Tk_ind=1, 
         @error "Tchem index out of range"
     end
 
-    length(vars) >=3 && println("Tchem: ", var_set[3,temp_ind+1], "GeV, Tkin: ", var_set[4,temp_ind+1], "GeV")
+    length(vars) >=3 && printout==true && println("Tchem: ", var_set[3,temp_ind+1], "GeV, Tkin: ", var_set[4,temp_ind+1], "GeV")
 
     plot_var_set = var_set[1:2,1+temp_ind:ptur_dim+temp_ind]
     plot_K_set = K_set[:,1+temp_ind:ptur_dim+temp_ind]
@@ -67,7 +67,7 @@ end
 
 
 #plots 8 kernels in 2d (Tchem, Tkin) given indices for pt,ur, prints according pt,ur
-function plot_sorted_kernels_temps(var_set, K_set, K_labels; pt_ind=1, ur_ind=1, title="")
+function plot_sorted_kernels_temps(var_set, K_set, K_labels; pt_ind=1, ur_ind=1, title="", printout=true)
     vars = _get_vars(var_set)
     var_dim = size(var_set)[2]
     pt_dim = length(vars[1])
@@ -84,7 +84,7 @@ function plot_sorted_kernels_temps(var_set, K_set, K_labels; pt_ind=1, ur_ind=1,
     ptur_ind_gen = (pt_ind+(ur_ind-1)*pt_dim ) % ptur_dim
     ptur_ind = [i for i in 1:var_dim if i%ptur_dim==ptur_ind_gen]
 
-    println("pT: ", var_set[1,ptur_ind[1]], "GeV, ur: ", var_set[2,ptur_ind[1]], "GeV")
+    printout==true && println("pT: ", var_set[1,ptur_ind[1]], "GeV, ur: ", var_set[2,ptur_ind[1]], "GeV")
 
     plot_var_set = hcat([var_set[3:4,i] for i in ptur_ind]...)
     plot_K_set = hcat([K_set[:,i] for i in ptur_ind]...)
@@ -102,34 +102,46 @@ end
 
 # compare prediction and interpolation for 8 kernels in pt,ur given values for Tchem, Tkin
 # returns 8k for interpol, pred & ratio
-function compare_kernels_ptur(var_set, K_func, trainstate, Tc, Tk; n=20)
+function compare_kernels_ptur(var_set, K_func, model, Tc, Tk; n=20)
     var_val_set_ptur = compute_sorted_var_set(_get_range(var_set[1:2,:]), n=n)
     var_val_set_tc = transpose([Tc for i in 1:n*n])
     var_val_set_tk = transpose([Tk for i in 1:n*n])
     var_val_set = vcat(var_val_set_ptur, var_val_set_tc, var_val_set_tk)
     K_val_set = Kernels(var_val_set, K_func)
-    K_val_NN, _ = Lux.apply(trainstate.model, var_val_set, trainstate.parameters, trainstate.states)
+    K_val_NN = model(var_val_set)
 
-    p1 = plot_sorted_kernels_ptur(var_val_set, K_val_set, K_labels, title="true kernels");
-    p2 = plot_sorted_kernels_ptur(var_val_set, K_val_NN, K_labels, title="NN kernels");
-    p3 = plot_sorted_kernels_ptur(var_val_set, K_val_NN ./K_val_set, K_labels, title="NN / true");
+    Losses = [MSELoss()(K_val_NN[i,:], K_val_set[i,:]) for i in axes(K_val_NN, 1)]
+    println("Loss in each kernel:")
+    for i in axes(K_val_NN,1)
+        println(K_labels[i], ": ", Losses[i])
+    end
+
+    p1 = plot_sorted_kernels_ptur(var_val_set, K_val_set, K_labels, title="true kernels", printout=false);
+    p2 = plot_sorted_kernels_ptur(var_val_set, K_val_NN, K_labels, title="NN kernels", printout=false);
+    p3 = plot_sorted_kernels_ptur(var_val_set, K_val_NN ./K_val_set, K_labels, title="NN / true", printout=false);
     return plot(p1,p2,p3, layout=(3,1), size=(2000,3000))
 end
 
 
 # compare prediction and interpolation for 8 kernels in Tchem, Tkin given values for pt, ur
 # returns 8k for interpol, pred & ratio
-function compare_kernels_temps(var_set, K_func, trainstate, pt, ur; n=20)
-    var_val_set_temps = get_sorted_var_set(_get_range(var_set[3:4,:]), n=n)
+function compare_kernels_temps(var_set, K_func, model, pt, ur; n=20)
+    var_val_set_temps = compute_sorted_var_set(_get_range(var_set[3:4,:]), n=n)
     var_val_set_pt = transpose([pt for i in 1:n*n])
     var_val_set_ur = transpose([ur for i in 1:n*n])
     var_val_set = vcat( var_val_set_pt, var_val_set_ur, var_val_set_temps)
     K_val_set = Kernels(var_val_set, K_func)
-    K_val_NN, _ = Lux.apply(trainstate.model, var_val_set, trainstate.parameters, trainstate.states)
+    K_val_NN = model(var_val_set)
 
-    p1 = plot_sorted_kernels_temps(var_val_set, K_val_set, K_labels, title="true kernels");
-    p2 = plot_sorted_kernels_temps(var_val_set, K_val_NN, K_labels, title="NN kernels");
-    p3 = plot_sorted_kernels_temps(var_val_set, K_val_NN ./K_val_set, K_labels, title="NN / true");
+    Losses = [MSELoss()(K_val_NN[i,:], K_val_set[i,:]) for i in axes(K_val_NN, 1)]
+    println("Loss in each kernel:")
+    for i in axes(K_val_NN,1)
+        println(K_labels[i], ": ", Losses[i])
+    end
+
+    p1 = plot_sorted_kernels_temps(var_val_set, K_val_set, K_labels, title="true kernels", printout=false);
+    p2 = plot_sorted_kernels_temps(var_val_set, K_val_NN, K_labels, title="NN kernels", printout=false);
+    p3 = plot_sorted_kernels_temps(var_val_set, K_val_NN ./K_val_set, K_labels, title="NN / true", printout=false);
     return plot(p1,p2,p3, layout=(3,1), size=(2000,3000))
 end
 

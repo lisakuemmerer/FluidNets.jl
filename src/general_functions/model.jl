@@ -1,24 +1,32 @@
 
 
 ##############################################################################################################
-# structure for model
+# # for reference: structure for model as included in Fluidum
 
+# struct model_structure{}
+#     model::Any
+#     parameters::Any
+#     states::Any
+# end
 
-abstract type own_model_structures end
-struct model_structure{}<:own_model_structures
-    model::Any
-    parameters::Any
-    states::Any
-end
+# # can be applied equiv. to Trainstate -> include both options in structure
+# model_structures = Union{Lux.Training.TrainState, model_structure}
 
-# can be applied equiv. to Trainstate -> include both options in structure
-model_structures = Union{Lux.Training.TrainState, own_model_structures}
+# # easy apply: NN(x) gives prediction
+# function (NN::model_structures)(x)
+#     pred,_ = Lux.apply(NN.model, x, NN.parameters, NN.states)
+#     return pred
+# end
 
+# # import export
+# function save_model(NN, filename)
+#     @save filename NN
+# end
+# function load_model(filename)
+#     @load filename NN
+#     return NN
+# end
 
-# easy apply: NN(x) gives prediction
-function (NN::model_structures)(x)
-    return Lux.apply(NN.model, x, NN.parameters, NN.states)
-end
 
 
 
@@ -257,9 +265,6 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
 end
 
 
-
-
-
 # adds input & output layers as repreprocessing accoring to  used preprocessing parameters
 # NN: trained NN, var_prep_pars&K_prep_pars: preprocessing parameters as returned by get_train_test_set
 function reprocess_model(NN_unprep; var_prep_pars=nothing, K_prep_pars=nothing)
@@ -292,22 +297,6 @@ function reprocess_model(NN_unprep; var_prep_pars=nothing, K_prep_pars=nothing)
     # returns NN-structure with model, parameters, states with extra layers
     return model_structure(m,p,s)
 end
-
-
-
-
-# import export
-function save_model(NN, filename)
-    @save filename NN
-end
-
-
-function load_model(filename)
-    @load filename NN
-    return NN
-end
-
-
 
 
 

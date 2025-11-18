@@ -206,6 +206,26 @@ function get_train_test_set(var_set, K_set; preprocess_vars=false, preprocess_K=
 end
 
 
+# compute random variable set
+# var_range can be array range as in _get_range, or variable arrays as in _get_vars
+# n: number of samples, rng: random number generator
+# returns random variable set in matrix form (#vars, #samples)
+function compute_var_set(var_range; n=100)
+    v_rand = [rand(n)*(v[end]-v[1]) .+ v[1] for v in var_range]
+    return stack(v_rand, dims=1)
+end
+
+
+# compute sorted variable set (grid)
+# var_range can be array range as in _get_range, or variable arrays as in _get_vars
+# n: number of samples - each combination is computed. will return n^(#vars) samples
+# returns random variable set in matrix form (#vars, #samples)
+function compute_sorted_var_set(var_range; n=10)
+    v_rand = [sort(unique(rand(n)*(v[end]-v[1]) .+ v[1])) for v in var_range]
+    return _get_set(v_rand)
+end
+
+
 
 
 
@@ -234,27 +254,6 @@ end
 
 ##############################################################################################################
 # OTHER STUFF: get sets based on Interpolation ( might not work anymore ? )
-
-
-# compute random variable set
-# var_range can be array range as in _get_range, or variable arrays as in _get_vars
-# n: number of samples, rng: random number generator
-# returns random variable set in matrix form (#vars, #samples)
-function compute_var_set(var_range; n=100)
-    v_rand = [rand(n)*(v[end]-v[1]) .+ v[1] for v in var_range]
-    return stack(v_rand, dims=1)
-end
-
-
-# compute sorted variable set (grid)
-# var_range can be array range as in _get_range, or variable arrays as in _get_vars
-# n: number of samples - each combination is computed. will return n^(#vars) samples
-# returns random variable set in matrix form (#vars, #samples)
-function compute_sorted_var_set(var_range; n=10)
-    v_rand = [sort(unique(rand(n)*(v[end]-v[1]) .+ v[1])) for v in var_range]
-    return _get_set(v_rand)
-end
-
 
 
 # random variables with corresponding kernels in mtrx form (#vars, n), (#kernels, n)
