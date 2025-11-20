@@ -24,6 +24,8 @@ function trial(scen; deepsave=false)
         pv = get_min_width(var_set)
     elseif scen[:prep_vars] == "midhalfwidth"
         pv = get_mid_halfwidth(var_set)
+    elseif scen[:prep_vars] == "meanstd"
+        pv = get_mean_std(var_set)
     end
 
     if scen[:prep_K] == "none"
@@ -34,17 +36,21 @@ function trial(scen; deepsave=false)
         pk = get_mid_halfwidth(K_set)
     elseif scen[:prep_K] == "zeroabsmax"
         pk = get_zero_absmax(K_set)
+    elseif scen[:prep_K] == "meanstd"
+        pk = get_mean_std(K_set)
     end
 
     # unpack activation functions
     if scen[:act_fct] == "sigmoid"
         actfct = sigmoid_fast
-    elseif scen[:act_fct]  == "relu"
+    elseif scen[:act_fct] == "tanh"
+        actfct = tanh_fast
+    elseif scen[:act_fct] == "relu"
         actfct = relu
-    elseif scen[:act_fct]  == "leakyrelu_001"
+    elseif scen[:act_fct] == "leakyrelu_001"
         actfct = leakyrelu
-    elseif scen[:act_fct]  == "leakyrelu_02"
-        actfct = leakyrelu_grad(0.2)
+    elseif scen[:act_fct] == "leakyrelu_01"
+        actfct = leakyrelu_grad(0.1)
     end
 
     # unpack initializers for weights in hidden layers
@@ -77,6 +83,8 @@ function trial(scen; deepsave=false)
         initializer_bias = randn32
     elseif scen[:initializer_bias] == "random_uniform"
         initializer_bias = rand32
+    elseif scen[:initializer_bias] == "zeros"
+        initializer_bias = zeros32
     elseif scen[:initializer_bias] == "nothing"
         initializer_bias = nothing
     end
@@ -115,13 +123,13 @@ end
 # put in hyperparameter options you wish to try
 # if you want to evaluate different hyperparameters you need to adjust the trial function accordingly
 # functions can not be saved correctly, which is why their options should be saved as string and get unpacked correctly in the trial-function
-scens = Dict{Symbol, Any}(:prep_vars => ["none", "minwidth", "midhalfwidth"],
-    :prep_K => ["none", "minwidth", "midhalfwidth", "zeroabsmax"], 
+scens = Dict{Symbol, Any}(:prep_vars => ["none", "minwidth", "midhalfwidth", "meanstd"],
+    :prep_K => ["none", "minwidth", "midhalfwidth", "zeroabsmax", "meanstd"], 
     :nb_hl => [4,5,6,7], 
     :hl_dim => [32,64,128,264], 
-    :act_fct => ["sigmoid", "relu", "leakyrelu_001", "leakyrelu_02"], 
+    :act_fct => ["sigmoid","tanh", "relu", "leakyrelu_001", "leakyrelu_01"], 
     :initializer_weight => ["glorot_normal", "glorot_uniform", "kaiming_normal", "kaiming_uniform", "random_normal", "random_uniform", "nothing"],
-    :initializer_bias => ["glorot_normal", "glorot_uniform", "kaiming_normal", "kaiming_uniform", "random_normal", "random_uniform", "nothing"],
+    :initializer_bias => ["glorot_normal", "glorot_uniform", "kaiming_normal", "kaiming_uniform", "random_normal", "random_uniform", "nothing", "zeros"],
     :batchsize => [100,500,1000,5000], 
     :loss_fct => ["mse", "xweight", "yweight"], 
     :lera => 10 .^LinRange(-4,-2,10),
@@ -131,8 +139,8 @@ scens = Dict{Symbol, Any}(:prep_vars => ["none", "minwidth", "midhalfwidth"],
 
 
 # put in exeptions for combinations of parameter choices that do not make sense
-excepts = [s->s[:loss_fct]=="yweight" && (s[:prep_K]=="midhalfwidth" || s[:prep_K]=="minwidth"), 
-    s -> s[:loss_fct]=="xweight" && s[:prep_vars]=="none"];
+excepts = [s->s[:loss_fct]=="yweight" && (s[:prep_K]=="midhalfwidth" || s[:prep_K]=="minwidth" || s[:prep_K]=="meanstd"), 
+    s -> s[:loss_fct]=="xweight" && (s[:prep_vars]=="none" || s[:prep_vars]=="midhalfwidth" || s[:prep_vars]=="meanstd")];
 
 
 # scens_fast = Dict{Symbol, Any}(:prep_vars => ["none", "minwidth", "midhalfwidth"],

@@ -33,7 +33,7 @@ freezeout_results_default = freezeout_results(0.1565)
 
 
 ##############################################################################################################
-# minimal use of fluidum to calculate a freeze out
+# functions to compare the spectra computed with Kernels from either neural network or interpolated FastReso data
 
 
 function compare_spectra_2D(part, K_func, NN; pt_min=0., pt_max=10., steps=100, comp_ratio=true, plotlog=true)
@@ -122,3 +122,4 @@ function compare_spectra_4D(Tc, Tk, part, K_func, NN; pt_min=0., pt_max=10., ste
 end
 
 export compare_spectra_2D, compare_spectra_4D
+

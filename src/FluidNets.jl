@@ -13,6 +13,7 @@ using Functors
 using DataStructures
 using StatsBase
 using Fluidum
+using NearestNeighbors
 
 include("general_functions/model.jl")
 include("general_functions/process_data.jl")

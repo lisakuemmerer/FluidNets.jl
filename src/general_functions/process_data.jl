@@ -167,15 +167,44 @@ end
 ##############################################################################################################
 # get random train & test set
 
+# function to sample uniform in all variables
+function _uniform_subset(X, M; oversample_factor = 3)
+    d, N = size(X)
+    # Normalize
+    Xmin = minimum.(eachrow(X))
+    Xmax = maximum.(eachrow(X))
+    Xnorm = ((X .- Xmin) ./ (Xmax .- Xmin))
+
+    tree = KDTree(Xnorm)
+    unique_idxs = Int[]
+
+    while length(unique_idxs) < M
+        # sample more points than needed
+        K = oversample_factor * (M - length(unique_idxs))
+        samples = rand(K, d)
+
+        idxs, _ = knn(tree, samples', 1)
+        append!(unique_idxs, [first(i) for i in idxs])
+        unique_idxs = unique(unique_idxs)
+    end
+    return unique_idxs[1:M]
+end
 
 # chose two random subsets from given dataset
 # n_train/test: number of samples in train/test set. n_train+n_test must be smaller than number of samples
+# if the variable grid is not even, but the samples should be uniform, choose uniform=true
 # preprocessing can be false (no prep) or a tuple with preprocessing parameters as given to preprocess()
 # returns train & test sets for variables & kernels, as well as used preprocessing parameters
-function get_train_test_set(var_set, K_set; preprocess_vars=false, preprocess_K=false, n_train=10000, n_test=10000)
+function get_train_test_set(var_set, K_set; preprocess_vars=false, preprocess_K=false, n_train=10000, n_test=10000, uniform=true)
 
-    # get random unique indices for train/test set
-    ind = shuffle(axes(var_set,2))[1:n_train+n_test]
+    if uniform
+        n_train+n_test>=size(var_set,2)/5 && @warn "requested sample not uniform"
+        ind = _uniform_subset(var_set, n_train+n_test)
+    else
+        n_train+n_test>=size(var_set,2) && @error "requested samples to big"
+        ind = shuffle(axes(var_set,2))[1:n_train+n_test]
+    end
+
     rand_vars = var_set[:,ind]
     rand_Ks = K_set[:,ind]
 
