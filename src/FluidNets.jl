@@ -15,7 +15,7 @@ using StatsBase
 using Fluidum
 using NearestNeighbors
 
-include("general_functions/model.jl")
+include("general_functions/build_model.jl")
 include("general_functions/process_data.jl")
 include("general_functions/hyperparameter_optimization.jl")
 include("general_functions/plotstuff.jl")
@@ -32,7 +32,7 @@ export model_structure, model_structures, initiate_model, train_model!, reproces
 export read_data, get_mean_std, get_mid_halfwidth, get_min_width, get_zero_absmax, preprocess, get_train_test_set
 export extrapolate_interpolate_kernels, Kernels
 export MyXweightLoss, MyYweightLoss, leakyrelu_grad
-export trials, run_all_trials, save_trials, load_trials, merge_trials
+export scenario_frontend_to_backend, trials, run_all_trials, save_trials, load_trials, merge_trials
 export plot_losses, plot_sorted_kernels_ptur, plot_sorted_kernels_temps, compare_kernels_ptur, compare_kernels_temps
 
 

@@ -117,7 +117,7 @@ end
 # possible arguments: nb_hl=number of hidden layers, hl_dim=number of neurons in each hidden layer, 
 # act_fct=activation function for hidden layers, out_act_fct=activation function for output layer, 
 # param64=convert parameters to Float64, 
-# hl_weight, hl_bias, inp_weight, inp_bias, out_weight, out_bias=initialization of weights and biases in respective layers
+# hl_weight, hl_bias, inp_weight, inp_bias, out_weight, out_bias=initialization of weights and biases in respective layers. for hidden layers the function includes automatic computation of gain
 function initiate_model(inp_dim, out_dim; nb_hl=5, hl_dim=32, act_fct=relu, in_act_fct=identity, out_act_fct=identity, param64=true,
                     hl_weight=nothing, hl_bias=nothing, inp_weight=nothing, inp_bias=nothing, out_weight=nothing, out_bias=nothing)
 
@@ -125,7 +125,6 @@ function initiate_model(inp_dim, out_dim; nb_hl=5, hl_dim=32, act_fct=relu, in_a
     hl_weight isa InitswithgainTypes && act_fct isa ActfctswithgainTypes && (hl_weight = _initializer_gain(hl_weight, act_fct))
     inp_weight isa InitswithgainTypes && in_act_fct isa ActfctswithgainTypes && (inp_weight = _initializer_gain(inp_weight, in_act_fct))
     out_weight isa InitswithgainTypes && out_act_fct isa ActfctswithgainTypes && (out_weight = _initializer_gain(out_weight, out_act_fct))
-
 
     # make chain of hidden layers
     hidden_layers = []

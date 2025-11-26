@@ -15,99 +15,19 @@ var_set, K_set = read_data("/home/lisa/MA/Data/Full_PCE/Kernels/pion_thermal_BG.
 # run one training with given hyperparameters defined in scen
 # hyperparameters need to be correctly unpacked or put in at correct argument
 # this function can be customized according to which hyperparameters should be tested
-function trial(scen; deepsave=false)
+function trial(scen_frt; deepsave=false)
 
-    # unpack preprocessing parameters
-    if scen[:prep_vars] == "none"
-        pv = false
-    elseif scen[:prep_vars] == "minwidth"
-        pv = get_min_width(var_set)
-    elseif scen[:prep_vars] == "midhalfwidth"
-        pv = get_mid_halfwidth(var_set)
-    elseif scen[:prep_vars] == "meanstd"
-        pv = get_mean_std(var_set)
-    end
+    scen = scenario_frontend_to_backend(scen_frt)
 
-    if scen[:prep_K] == "none"
-        pk = false
-    elseif scen[:prep_K] == "minwidth"
-        pk = get_min_width(K_set)
-    elseif scen[:prep_K] == "midhalfwidth"
-        pk = get_mid_halfwidth(K_set)
-    elseif scen[:prep_K] == "zeroabsmax"
-        pk = get_zero_absmax(K_set)
-    elseif scen[:prep_K] == "meanstd"
-        pk = get_mean_std(K_set)
-    end
-
-    # unpack activation functions
-    if scen[:act_fct] == "sigmoid"
-        actfct = sigmoid_fast
-    elseif scen[:act_fct] == "tanh"
-        actfct = tanh_fast
-    elseif scen[:act_fct] == "relu"
-        actfct = relu
-    elseif scen[:act_fct] == "leakyrelu_001"
-        actfct = leakyrelu
-    elseif scen[:act_fct] == "leakyrelu_01"
-        actfct = leakyrelu_grad(0.1)
-    end
-
-    # unpack initializers for weights in hidden layers
-    if scen[:initializer_weight] == "glorot_normal"
-        initializer_weight = glorot_normal
-    elseif scen[:initializer_weight] == "glorot_uniform"
-        initializer_weight = glorot_uniform
-    elseif scen[:initializer_weight] == "kaiming_normal"
-        initializer_weight = kaiming_normal     
-    elseif scen[:initializer_weight] == "kaiming_uniform"
-        initializer_weight = kaiming_uniform
-    elseif scen[:initializer_weight] == "random_normal"
-        initializer_weight = randn32
-    elseif scen[:initializer_weight] == "random_uniform"
-        initializer_weight = rand32
-    elseif scen[:initializer_weight] == "nothing"
-        initializer_weight = nothing
-    end
-
-    # unpack initializers for biases in hidden layers
-    if scen[:initializer_bias] == "glorot_normal"
-        initializer_bias = glorot_normal
-    elseif scen[:initializer_bias] == "glorot_uniform"
-        initializer_bias = glorot_uniform
-    elseif scen[:initializer_bias] == "kaiming_normal"
-        initializer_bias = kaiming_normal
-    elseif scen[:initializer_bias] == "kaiming_uniform"
-        initializer_bias = kaiming_uniform
-    elseif scen[:initializer_bias] == "random_normal"
-        initializer_bias = randn32
-    elseif scen[:initializer_bias] == "random_uniform"
-        initializer_bias = rand32
-    elseif scen[:initializer_bias] == "zeros"
-        initializer_bias = zeros32
-    elseif scen[:initializer_bias] == "nothing"
-        initializer_bias = nothing
-    end
-
-    # unpack loss functions
-    if scen[:loss_fct] == "mse"
-        lossfct = MSELoss()
-    elseif scen[:loss_fct] == "xweight"
-        lossfct = MyXweightLoss()
-    elseif scen[:loss_fct] == "yweight"
-        lossfct = MyYweightLoss()
-    end
-
-
-    var_train_set, K_train_set, var_test_set, K_test_set, var_prep_pars, K_prep_pars = get_train_test_set(var_set, K_set,
-    preprocess_vars=pv, preprocess_K=pk, n_train=10000, n_test=10000);
-    my_NN = initiate_model(4, 8, nb_hl=scen[:nb_hl], hl_dim=scen[:hl_dim], act_fct=actfct, hl_weight=initializer_weight, hl_bias=initializer_bias);
+    var_train_set, K_train_set, var_test_set, K_test_set, _, _ = get_train_test_set(var_set, K_set,
+    preprocess_vars=scen[:prep_vars], preprocess_K=scen[:prep_K], n_train=10000, n_test=10000);
+    my_NN = initiate_model(4, 8, nb_hl=scen[:nb_hl], hl_dim=scen[:hl_dim], act_fct=scen[:act_fct], hl_weight=scen[:initializer_weight], hl_bias=scen[:initializer_bias]);
     my_NN, trainloss, testloss, tft, overfit = train_model!(var_train_set, K_train_set, my_NN, 
-    batchsize=scen[:batchsize], loss_fct=lossfct, lera=scen[:lera], beta=(scen[:beta1],scen[:beta2]), lambda=scen[:lambda], 
+    batchsize=scen[:batchsize], loss_fct=scen[:loss_fct], lera=scen[:lera], beta=(scen[:beta1],scen[:beta2]), lambda=scen[:lambda], 
     nepochs=1000, x_test=var_test_set, y_test=K_test_set, optim_mode=true, messages=false);
 
     # return: dictionary containing used hyperparameters, time for training, testloss, and model_overfit
-    dict = OrderedDict{Symbol,Any}(k=>v for (k,v) in scen)
+    dict = OrderedDict{Symbol,Any}(k=>v for (k,v) in scen_frt)
     !(deepsave) && (dict[:endloss] = testloss[2][end])
     !(deepsave) && (dict[:improv] = testloss[2][end]/testloss[2][1])
     deepsave && (dict[:NN] = my_NN)
@@ -121,8 +41,8 @@ end
 
 
 # put in hyperparameter options you wish to try
+# function can not be saved correctly, which is why strings are used @ frontend. options are explained in scenario_frontend_to_backend and can be adjusted there
 # if you want to evaluate different hyperparameters you need to adjust the trial function accordingly
-# functions can not be saved correctly, which is why their options should be saved as string and get unpacked correctly in the trial-function
 scens = Dict{Symbol, Any}(:prep_vars => ["none", "minwidth", "midhalfwidth", "meanstd"],
     :prep_K => ["none", "minwidth", "midhalfwidth", "zeroabsmax", "meanstd"], 
     :nb_hl => [4,5,6,7], 
@@ -161,7 +81,7 @@ excepts = [s->s[:loss_fct]=="yweight" && (s[:prep_K]=="midhalfwidth" || s[:prep_
 
 # # DO NOT UNCOMMENT UNLESS WANTED, RUNS FOR MULTIPLE HOURS !!!
 # # function will call trial-function and run #num_trials options from scen without excepts
-# trial_all = trials(scens, excepts=excepts, num_trials=2);
+#trial_all = trials(scens, excepts=excepts, num_trials=2);
 
 
 # save the trials
