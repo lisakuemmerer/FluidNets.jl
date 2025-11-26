@@ -1,7 +1,7 @@
 
 
 ##############################################################################################################
-# This script allows to run hyperparameter optimization.
+# This script runs hyperparameter optimization.
 # the 'trial' function will be called for different options defined below by the 'trials' function
 
 

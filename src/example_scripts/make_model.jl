@@ -6,7 +6,7 @@ using Lux
 using Plots
 
 
-# these are the parameters that need to be changed. the rest can  in principle used as is
+# this block contains all the parameters that need to be adjusted
 var_dim, K_dim = 4,8; # number of variables & Kernels
 datapath = "/home/lisa/MA/Data/Full_PCE/Kernels/pion_thermal_BG.txt"; # path to datafile
 savepath = "/home/lisa/MA/NeuralNetwork/pion_4D_BG/tests/"; # path where output should be saved
@@ -61,23 +61,18 @@ batchsize=scen[:batchsize], nepochs=scen[:nepochs], early_stopping=scen[:early_s
 
 # plot learning curve
 learning_curve = plot_losses(trainloss, testloss)
-savefig(learning_curve, String(savepath*"learning_curve_"*saveas*".png"))
+#savefig(learning_curve, String(savepath*"learning_curve_"*saveas*".png"))
 
 # adds layers that include preprocessing
 NN = reprocess_model(my_NN, var_prep_pars=var_prep_pars,K_prep_pars=K_prep_pars);
-save_model(NN, String(savepath*"NN_"*saveas*".jld2"))
+#save_model(NN, String(savepath*"NN_"*saveas*".jld2"))
 
-
-
-
-# # alternative approach: load saved model
-# NN = load_model("/home/lisa/MA/NeuralNetwork/pion_4D_BG/tests/NN_default_uniform.jld2");
 
 
 
 # compare the kernel network prediction & interpolation
-compare_kernels_ptur(var_set, K_func, NN, 0.143, 0.125)
-compare_kernels_temps(var_set, K_func, NN, 1.5, 1.5)
+compare_kernels_ptur(var_set, K_func, NN, 0.143, 0.125, show_mse=true)
+compare_kernels_temps(var_set, K_func, NN, 1.5, 1.5, show_mse=true)
 
 # compare spectra calculated with network prediction & interpolation
 compare_spectra_4D(0.143, 0.125, dic.pion, K_func, NN; pt_min=0., pt_max=3.7)

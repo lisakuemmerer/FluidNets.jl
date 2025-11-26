@@ -19,9 +19,14 @@ end
 
 
 # plots one kernel in 2d, usable only on sorted (on a grid) sets, 
-function _plot_sorted_kernel_2d(var_set, K_set, i; labels = ["pT", "uʳ"], title="")
+function _plot_sorted_kernel_2d(var_set, K_set, i; labels = ["pT", "uʳ"], title="", surface=true)
     vars = _get_vars(var_set)
-    return plot(vars[2],vars[1], reshape(K_set, (size(K_set)[1],length(vars[1]),length(vars[2])))[i,:,:], title=title, xlabel=labels[2], ylabel=labels[1], st=:surface, legend=:none)
+    if surface
+        p = plot(vars[2],vars[1], reshape(K_set, (size(K_set)[1],length(vars[1]),length(vars[2])))[i,:,:], title=title, xlabel=labels[2], ylabel=labels[1], st=:surface, legend=:none)
+    else
+        p = plot(vars[2],vars[1], reshape(K_set, (size(K_set)[1],length(vars[1]),length(vars[2])))[i,:,:], title=title, xlabel=labels[2], ylabel=labels[1], st=:heatmap)
+    end
+    return p
 end 
 
 
@@ -32,9 +37,14 @@ end
 
 
 # plots 8 kernels in 2d
-function _plot_sorted_kernels_2d(var_set, K_set, K_labels; labels = ["pT", "uʳ"], title="")
-    p = [_plot_sorted_kernel_2d(var_set, K_set, i, title=K_labels[i], labels=labels) for i in axes(K_set,1)]
-    return plot(p..., layout=(2,4), size=(2000,1000), plot_title=title)
+function _plot_sorted_kernels_2d(var_set, K_set, K_labels; labels = ["pT", "uʳ"], title="", surface=true)
+    p = [_plot_sorted_kernel_2d(var_set, K_set, i, title=K_labels[i], labels=labels, surface=surface) for i in axes(K_set,1)]
+    if surface
+        pl = plot(p..., layout=(2,4), size=(2000,1000), plot_title=title)
+    else
+        pl = plot(p..., layout=(2,4), size=(3000,1000), left_margin=20*Plots.mm, bottom_margin=20*Plots.mm, plot_title=title)
+    end
+    return pl
 end
 
 
@@ -95,14 +105,13 @@ end
 
 
 
-
 ##############################################################################################################
-# comparison of prediction & interpolation of 4d data, BG kernels
+# comparison of prediction & interpolation of 4D data, BG kernels
 
 
 # compare prediction and interpolation for 8 kernels in pt,ur given values for Tchem, Tkin
 # returns 8k for interpol, pred & ratio
-function compare_kernels_ptur(var_set, K_func, model, Tc, Tk; n=20)
+function compare_kernels_ptur(var_set, K_func, model, Tc, Tk; n=20, show_mse=false)
     var_val_set_ptur = compute_sorted_var_set(_get_range(var_set[1:2,:]), n=n)
     var_val_set_tc = transpose([Tc for i in 1:n*n])
     var_val_set_tk = transpose([Tk for i in 1:n*n])
@@ -111,21 +120,27 @@ function compare_kernels_ptur(var_set, K_func, model, Tc, Tk; n=20)
     K_val_NN = model(var_val_set)
 
     Losses = [MSELoss()(K_val_NN[i,:], K_val_set[i,:]) for i in axes(K_val_NN, 1)]
-    println("Loss in each kernel:")
+    println("Loss in each kernel for Tchem=$(Tc), Tkin=$(Tk):")
     for i in axes(K_val_NN,1)
         println(K_labels[i], ": ", Losses[i])
     end
 
-    p1 = plot_sorted_kernels_ptur(var_val_set, K_val_set, K_labels, title="true kernels", printout=false);
-    p2 = plot_sorted_kernels_ptur(var_val_set, K_val_NN, K_labels, title="NN kernels", printout=false);
-    p3 = plot_sorted_kernels_ptur(var_val_set, K_val_NN ./K_val_set, K_labels, title="NN / true", printout=false);
-    return plot(p1,p2,p3, layout=(3,1), size=(2000,3000))
+    if show_mse
+        p = _plot_sorted_kernels_2d(var_val_set_ptur, (K_val_NN .-K_val_set).^2, K_labels, title="MSE between prediction and interpolation", surface=false)
+    else
+        p1 = _plot_sorted_kernels_2d(var_val_set_ptur, K_val_set, K_labels, title="True kernels");
+        p2 = _plot_sorted_kernels_2d(var_val_set_ptur, K_val_NN, K_labels, title="NN kernels");
+        p3 = _plot_sorted_kernels_2d(var_val_set_ptur, K_val_NN ./K_val_set, K_labels, title="NN / true");
+        p = plot(p1,p2,p3, layout=(3,1), size=(2000,3000))
+    end
+
+    return p
 end
 
 
 # compare prediction and interpolation for 8 kernels in Tchem, Tkin given values for pt, ur
 # returns 8k for interpol, pred & ratio
-function compare_kernels_temps(var_set, K_func, model, pt, ur; n=20)
+function compare_kernels_temps(var_set, K_func, model, pt, ur; n=20, show_mse=false)
     var_val_set_temps = compute_sorted_var_set(_get_range(var_set[3:4,:]), n=n)
     var_val_set_pt = transpose([pt for i in 1:n*n])
     var_val_set_ur = transpose([ur for i in 1:n*n])
@@ -134,15 +149,21 @@ function compare_kernels_temps(var_set, K_func, model, pt, ur; n=20)
     K_val_NN = model(var_val_set)
 
     Losses = [MSELoss()(K_val_NN[i,:], K_val_set[i,:]) for i in axes(K_val_NN, 1)]
-    println("Loss in each kernel:")
+    println("Loss in each kernel for pt=$(pt), ur=$(ur):")
     for i in axes(K_val_NN,1)
         println(K_labels[i], ": ", Losses[i])
     end
 
-    p1 = plot_sorted_kernels_temps(var_val_set, K_val_set, K_labels, title="true kernels", printout=false);
-    p2 = plot_sorted_kernels_temps(var_val_set, K_val_NN, K_labels, title="NN kernels", printout=false);
-    p3 = plot_sorted_kernels_temps(var_val_set, K_val_NN ./K_val_set, K_labels, title="NN / true", printout=false);
-    return plot(p1,p2,p3, layout=(3,1), size=(2000,3000))
+    if show_mse
+        p = _plot_sorted_kernels_2d(var_val_set_temps, (K_val_NN .-K_val_set).^2, K_labels, title="MSE between prediction and interpolation", surface=false)
+    else
+        p1 = _plot_sorted_kernels_2d(var_val_set_temps, K_val_set, K_labels, title="True kernels");
+        p2 = _plot_sorted_kernels_2d(var_val_set_temps, K_val_NN, K_labels, title="NN kernels");
+        p3 = _plot_sorted_kernels_2d(var_val_set_temps, K_val_NN ./K_val_set, K_labels, title="NN / true");
+        p = plot(p1,p2,p3, layout=(3,1), size=(2000,3000))
+    end
+
+    return p
 end
 
 
