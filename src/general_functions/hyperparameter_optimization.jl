@@ -1,42 +1,10 @@
 
 
-
-# THIS FUNCTION ONLY RANDOMLY TESTS GIVEN HYPERPARAMETERS !!!!
+##############################################################################################################
+# run different scenarios 
+# THESE FUNCTIONs ONLY RANDOMLY TESTS GIVEN HYPERPARAMETERS !!!!
 # IF YOU FIND A GOOD OPTIMIZATION PACKAGE IN JULA USE IT !!!!
 
-
-# try the objective function trial() #num_trials times with parameters taken form scens
-# scens needs to be Dictionary with hyperparameters & options
-# hyperparameters need to be correctly unpacked in trial() as entered in scens
-# excepts: remove impossible combinations. form: [p->p[:h1]==a && p[:h2]==b] will remove all combinations where scen[:h1]=a and scen[:h2]=b
-function trials(scens; excepts=[], num_trials=100)
-    
-    t0 = time()
-
-    #choose random option for each hyperparameter (only once), remove exeptions
-    opts_to_try = unique([Dict{Symbol,Any}(k=>v[rand(eachindex(v))] for (k,v) in scens) for i in 1:num_trials])
-    for e in excepts
-        filter!(!(e), opts_to_try)
-    end
-
-    # set number of trials to run to number of options left after removing exceptions
-    num_trials = length(opts_to_try)
-
-    t1 = time()
-
-    trial_vec = []
-    Threads.@threads for i in 1:num_trials
-        println("\n Starting trial ", i, "\n")
-        push!(trial_vec, trial(opts_to_try[i]))
-        println("Finished trial $(i); $(time()-t1)s")
-    end
-    
-    println("Time for trials: $(time()-t1)s")
-    println("Complete runtime: $(time()-t0)s")
-
-    # return: array of dictionaries containing the hyperparameters and loss output of each option
-    return trial_vec
-end
 
 
 
@@ -51,7 +19,7 @@ end
 # bias initializer, :initializer_bias => ["glorot_normal", "glorot_uniform", "kaiming_normal", "kaiming_uniform", "random_normal", "random_uniform", "nothing", "zeros"],
 # loss function, "xweight", "yweight" result in the defined default weights, otherwise the number after _ defines weight(>=1) and epsilon(<1), here: MyXWeightLoss(5), MyYweightLoss(0.01), :loss_fct => ["mse", "xweight", "yweight", "xweight_5", "yweight_001"], 
 
-function scenario_frontend_to_backend(scen_front; var_set=var_set, K_set=K_set)
+function scenario_frontend_to_backend(scen_front, var_set, K_set)
 
     # find all included keys
     scen_keys = keys(scen_front)
@@ -165,31 +133,68 @@ end
 
 
 
-# function that runs & saves ALL given scenarios
-# input: array of dictionaries containing hyperparameters, as output of trials
-# if output from trials is given, number of hyperparameters needs to be corrected
-# output: array of dictionaries containing hypperparameters & training parameters (trainstate, train&testloss, time of training...)
-function run_all_trials(scen_vec; num_hyppars=nothing)
 
+# run one training with given hyperparameters defined in scen
+# hyperparameters need to be correctly unpacked or put in at correct argument
+# this function can be customized according to which hyperparameters should be tested
+function _trial(scen_frt, var_set, K_set; deepsave=false)
+    var_dim = size(var_set, 1)
+    K_dim = size(K_set, 1)
+
+    scen = scenario_frontend_to_backend(scen_frt, var_set, K_set)
+
+    var_train_set, K_train_set, var_test_set, K_test_set, _, _ = get_train_test_set(var_set, K_set,
+    preprocess_vars=scen[:prep_vars], preprocess_K=scen[:prep_K], n_train=10000, n_test=10000);
+    my_NN = initiate_model(var_dim, K_dim, nb_hl=scen[:nb_hl], hl_dim=scen[:hl_dim], act_fct=scen[:act_fct], hl_weight=scen[:initializer_weight], hl_bias=scen[:initializer_bias]);
+    my_NN, trainloss, testloss, tft, overfit = train_model!(var_train_set, K_train_set, my_NN, 
+    batchsize=scen[:batchsize], loss_fct=MSELoss(), lera=scen[:lera], beta=(scen[:beta1],scen[:beta2]), lambda=scen[:lambda], 
+    nepochs=1000, x_test=var_test_set, y_test=K_test_set, optim_mode=true, messages=false);
+
+    # return: dictionary containing used hyperparameters, time for training, testloss, and model_overfit
+    dict = OrderedDict{Symbol,Any}(k=>v for (k,v) in scen_frt)
+    !(deepsave) && (dict[:endloss] = testloss[2][end])
+    !(deepsave) && (dict[:improv] = testloss[2][end]/testloss[2][1])
+    deepsave && (dict[:NN] = my_NN)
+    deepsave && (dict[:trainloss] = trainloss)
+    deepsave && (dict[:testloss] = testloss)
+    dict[:tft] = tft
+    dict[:overfit] = overfit
+
+    return dict
+end
+
+
+
+
+
+# try the objective function _trial() #num_trials times with parameters taken form scens
+# scens needs to be Dictionary with hyperparameters & options
+# hyperparameters need to be correctly unpacked in trial() as entered in scens
+# excepts: remove impossible combinations. form: [p->p[:h1]==a && p[:h2]==b] will remove all combinations where scen[:h1]=a and scen[:h2]=b
+function trials(scens, var_set, K_set; excepts=[], num_trials=100)
+    
     t0 = time()
-    
-    # set number of hyperparameters if not less than all dict. entries
-    num_hyppars === nothing && (num_hyppars=length(first(scen_vec)))
-    
-    # get keys of hyperparameters
-    hyppars = [k for k in keys(first(scen_vec))][1:num_hyppars]
+
+    #choose random option for each hyperparameter (only once), remove exeptions
+    opts_to_try = unique([Dict{Symbol,Any}(k=>v[rand(eachindex(v))] for (k,v) in scens) for i in 1:num_trials])
+    for e in excepts
+        filter!(!(e), opts_to_try)
+    end
+
+    # set number of trials to run to number of options left after removing exceptions
+    num_trials = length(opts_to_try)
 
     t1 = time()
 
     trial_vec = []
-    Threads.@threads for i in eachindex(scen_vec)
-        #println("\n Starting trial ", i, "\n")
-        push!(trial_vec, trial(scen_vec[i], deepsave=true))
-        println("\n Finished trial ", i, "\n")
+    Threads.@threads for i in 1:num_trials
+        println("\n Starting trial ", i, "\n")
+        push!(trial_vec, _trial(opts_to_try[i], var_set, K_set))
+        println("Finished trial $(i); $(time()-t1)s")
     end
     
-    println("\n time for trials: ", time()-t1, "s")
-    println("\n complete runtime: ", time()-t0, "s \n")
+    println("Time for trials: $(time()-t1)s")
+    println("Complete runtime: $(time()-t0)s")
 
     # return: array of dictionaries containing the hyperparameters and loss output of each option
     return trial_vec
@@ -220,3 +225,182 @@ function merge_trials(direct, filename)
 end
 
 
+# funtion to save one hyperparameter choice readable
+function save_hyppars(hyppars, outfile)
+    open(outfile, "w") do f
+        println(f, "Dict{Symbol, Any}(")
+        for (k,v) in hyppars
+            Pair{Symbol, Any}(k,v) != first(hyppars) && (print(f, ", \n"))
+            if v isa String
+                print(f, "$k => \"$v\"")
+            else
+                print(f, "$k => $v")
+            end
+        end
+        println(f, ")")
+    end
+end
+
+
+
+
+
+##############################################################################################################
+# evaluate different scenarios
+
+
+# sort trials by result
+sortby(Trials; verific=:endloss) = sort(Trials, by=t->t[verific])
+
+
+# get all the included hyperparameter options
+function get_options(Trials, hyppars; verific=:endloss)
+
+    # accomodate option of only one hyperparameter
+    hyppars isa Symbol && (hyppars = [hyppars])
+
+    # fill dictionary with empty array for each hyperparameter
+    scen = OrderedDict{Symbol, Any}(h=>[] for h in hyppars)
+    # fill dictionary entries with sorted options for each hyperparameter
+    for h in hyppars
+        for t in Trials
+            t[h] in scen[h] ? nothing : push!(scen[h], t[h])
+        end
+        if first(scen[h]) isa String && verific in keys(first(Trials))
+            sort!(scen[h], by=v->mean(t[verific] for t in filter(t->t[h]==v, Trials)))
+        else
+            sort!(scen[h])
+        end
+    end
+
+    # return only array of options if one hyperparameter is wanted
+    length(scen) == 1 && (scen = first(values(scen)))
+
+    return scen
+end
+
+
+# function to get
+function get_count_in_best_trials(h, Trials; trialmax=nothing, verific=:endloss)
+    trialmax===nothing && (trialmax=length(Trials))
+    return countmap([t[h] for t in sortby(Trials, verific=verific)[1:trialmax]])
+end
+
+
+# function to get mean result of hyperparameter choice
+function get_mean_result(h, Trials; trialmax=nothing, verific=:endloss)
+    trialmax===nothing && (trialmax=length(Trials))
+    Dict{Any,Any}(v=>mean(t[verific] for t in filter(t->t[h]==v, sortby(Trials, verific=verific)[1:trialmax])) for v in get_options(Trials,h))
+end
+
+
+# function to plot one hyperparameter with result
+function plot_hyppar(hyppar, Trials; trialmax=nothing, xscale=:identity, yscale=:log10, verific=:endloss)
+    trialmax===nothing && (trialmax=length(Trials))
+    Trials = sortby(Trials, verific=verific)[1:trialmax]
+    plot([t[hyppar] for t in Trials], [t[verific] for t in Trials], st=:scatter, xscale=xscale, yscale=yscale, title=String(hyppar), ylabel=String(verific), label="")
+end
+
+
+# function to plot the course of how often a hyperparameterchoice makes it to the best trials
+function plot_course_in_best_trials(hyppar, Trials; trialmax=nothing, verific=:endloss)
+    trialmax===nothing && (trialmax=length(Trials))
+    # sort trials
+    Trials_sorted = sortby(Trials, verific=verific)
+    # get hyperparameter options
+    vs = get_options(Trials, hyppar, verific=verific)
+    # fill a dictionary with functions counting how often the options occur in best ... trials
+    d = Dict{Any, Any}(v=>n->count(t->t[hyppar]==v, Trials_sorted[1:n]) for v in vs)
+    
+    # define range for plot
+    n = 0:10:trialmax
+    # make sure colours are in order 
+    series_colors = reshape([cgrad(:viridis)[z] for z in range(0, 1, length=length(vs))], 1, length(vs))
+
+    p = return plot(n, [d[v].(n)/d[v](length(Trials))*100 for v in vs], labels=reduce(hcat,vs), seriescolor = series_colors,
+    xlabel="number of best trials", ylabel="% in best trials", title=String(hyppar))
+
+    return p
+end
+
+
+# function that plots above plots for all hyppars at once
+function plot_all_hyppars(f, hyppars, Trials; kwargs...)
+    # number of hyppars -> size of plot
+    n = div(length(hyppars), 3, RoundUp)
+    
+    # extract plottitle if given
+    title = get(kwargs, :title, "") 
+
+    # make tuple out of remaining kwargs
+    inner_kwargs = NamedTuple(p for p in kwargs if p.first != :title)
+
+    # plot all hyperparameters
+    plot([f(h, Trials; inner_kwargs...) for h in hyppars]..., layout=(n, 3), size=(n * 500, 1800), left_margin=10*Plots.mm, bottom_margin=10*Plots.mm, plot_title=title)
+end
+
+
+# function to plot the correlation of two hyperparameters h1,h2
+function plot_correlation(h1, h2, Trials; trialmax=nothing, verific=:endloss, xscale=:identity, yscale=:identity, log_res=true)
+
+    trialmax===nothing && (trialmax=length(Trials))
+    Trials=sortby(Trials, verific=verific)[1:trialmax]
+
+    
+    #get included options for hyperparameters
+    v1,v2 = values(get_options(Trials, [h1,h2], verific=verific))
+
+    #fill matrix with mean endloss for combination
+    Comb = fill(NaN, length(v2), length(v1))
+    for i in eachindex(v2)
+        for j in eachindex(v1)
+            filtered = filter(t->t[h1]==v1[j]&&t[h2]==v2[i], Trials)
+            Comb[i,j] = isempty(filtered) ? NaN : mean(t[verific] for t in filtered)
+        end
+    end
+
+    #plot with corresponding options
+    if log_res
+        p =  heatmap(v1,v2, log10.(Comb), xscale=xscale, yscale=yscale, 
+        xlabel=String(h1), ylabel=String(h2), colorbar_title="$(String(verific)) (logarithmic)", c=:viridis)
+    else
+        p = heatmap(v1,v2, Comb, xscale=xscale, yscale=yscale, 
+        xlabel=String(h1), ylabel=String(h2), colorbar_title=String(verific), c=:viridis)
+    end
+
+    return p
+end
+
+
+
+
+
+##############################################################################################################
+# OTHER STUFF: test scenarios deeper ( might not work anymore ? )
+
+# function that runs & saves ALL given scenarios - use if you already have some good options that you want to compare deeper
+# input: array of dictionaries containing hyperparameters, as output of trials
+# if output from trials is given, number of hyperparameters needs to be corrected
+# output: array of dictionaries containing hypperparameters & training parameters (trainstate, train&testloss, time of training...)
+function run_all_trials(scen_vec; hyppars=nothing)
+
+    t0 = time()
+    
+    # remove  possible result entries in scen_vec dicts
+    hyppars!=nothing && (scen_vec=[Dict{Symbol, Any}((h=>s[h] for h in hyppars)) for s in scen_vec])
+
+    t1 = time()
+
+    trial_vec = []
+    Threads.@threads for i in eachindex(scen_vec)
+        #println("\n Starting trial ", i, "\n")
+        push!(trial_vec, _trial(scen_vec[i], deepsave=true))
+        println("\n Finished trial ", i, "\n")
+    end
+    
+    println("\n time for trials: ", time()-t1, "s")
+    println("\n complete runtime: ", time()-t0, "s \n")
+
+    # return: array of dictionaries containing the hyperparameters and loss output of each option
+    return trial_vec
+end

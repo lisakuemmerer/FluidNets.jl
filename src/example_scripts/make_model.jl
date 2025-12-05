@@ -1,32 +1,26 @@
-
-
 using FluidNets
-using Fluidum
-using Lux
-using Plots
-
 
 # this block contains all the parameters that need to be adjusted
 var_dim, K_dim = 4,8; # number of variables & Kernels
 datapath = "/home/lisa/MA/Data/Full_PCE/Kernels/pion_thermal_BG.txt"; # path to datafile
-savepath = "/home/lisa/MA/NeuralNetwork/pion_4D_BG/tests/"; # path where output should be saved
-saveas = "default_uniform"; # name indicating what kind of model this is
+savepath = "/home/lisa/MA/Final/parameter_tests/"; # path where output should be saved
+saveas = "yweight_uniform"; # name indicating what kind of model this is
 # choose hyperparatemers, options explained in workflow.jl
 hyppars = Dict{Symbol, Any}(
     :n_train => 10000,
     :n_test => 10000,
     :uniform => true,
     :prep_vars => "minwidth",
-    :prep_K => "meanstd", 
-    :nb_hl => 5 ,
-    :hl_dim => 128 ,
-    :act_fct => "leakyrelu_01",
-    :initializer_weight => "nothing",
-    :initializer_bias => "zeros",
-    :batchsize => 500,
+    :prep_K => "zeroabsmax", 
+    :nb_hl => 6,
+    :hl_dim => 128,
+    :act_fct => "sigmoid",
+    :initializer_weight => "glorot_uniform",
+    :initializer_bias => "nothing",
+    :batchsize => 100,
     :nepochs => 1000,
     :early_stopping => false,
-    :loss_fct => "yweight_01", 
+    :loss_fct => "yweight", 
     :lera => 0.001,
     :adapt_lera => false,
     :lera_trend => 0.999,
@@ -35,7 +29,9 @@ hyppars = Dict{Symbol, Any}(
     :lambda => 0.0); 
 
 
-    
+#save hyperparameter
+save_hyppars(hyppars, String(savepath*"stats_"*saveas*".txt"))
+
 
 
 # load data
@@ -45,7 +41,7 @@ var_set, K_set = read_data(datapath, var_dim, K_dim);
 K_func = extrapolate_interpolate_kernels(var_set, K_set);
 
 # translate chosen hyperparameters
-scen = scenario_frontend_to_backend(hyppars);
+scen = scenario_frontend_to_backend(hyppars, var_set, K_set);
 
 # separate data in train & test sets, save preprocessing parameters
 var_train_set, K_train_set, var_test_set, K_test_set, var_prep_pars, K_prep_pars = get_train_test_set(var_set, K_set,
@@ -61,21 +57,25 @@ batchsize=scen[:batchsize], nepochs=scen[:nepochs], early_stopping=scen[:early_s
 
 # plot learning curve
 learning_curve = plot_losses(trainloss, testloss)
-#savefig(learning_curve, String(savepath*"learning_curve_"*saveas*".png"))
+savefig(learning_curve, String(savepath*"learning_curve_"*saveas*".png"))
 
 # adds layers that include preprocessing
 NN = reprocess_model(my_NN, var_prep_pars=var_prep_pars,K_prep_pars=K_prep_pars);
-#save_model(NN, String(savepath*"NN_"*saveas*".jld2"))
+save_model(NN, String(savepath*"NN_"*saveas*".jld2"))
 
 
 
 
 # compare the kernel network prediction & interpolation
-compare_kernels_ptur(var_set, K_func, NN, 0.143, 0.125, show_mse=true)
-compare_kernels_temps(var_set, K_func, NN, 1.5, 1.5, show_mse=true)
+Kptur = compare_kernels_ptur(var_set, K_func, NN, 0.143, 0.125, show_mse=true)
+savefig(Kptur, String(savepath*"kernels_ptur_"*saveas*".png"))
+Ktemps = compare_kernels_temps(var_set, K_func, NN, 1.5, 1.5, show_mse=true)
+savefig(Ktemps, String(savepath*"kernels_temps_"*saveas*".png"))
 
 # compare spectra calculated with network prediction & interpolation
-compare_spectra_4D(0.143, 0.125, dic.pion, K_func, NN; pt_min=0., pt_max=3.7)
+spec = compare_spectra_4D(0.143, 0.125, dic.pion, K_func, NN; pt_min=0., pt_max=3.7)
+savefig(spec, String(savepath*"spectra_"*saveas*".png"))
+
 
 
 

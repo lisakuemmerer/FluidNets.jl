@@ -155,6 +155,7 @@ end
 # lera_trend=trend of learning rate. options:
 # ---scalar: 0.999 for 0.1% decrease every #lera_update_steps epochs
 # ---tuple: interpreted as (end, number of steps) and the learning rate is linearly interpolated between input lera, lera_trend[1] with lera_trend[2] steps. after this the last value lera_trend[1] is used until training ends
+# ---vector: custom vector, i.e 10.^LinRange(-2,-4,100) for logarithmic decrease. start should coincide with lera
 # loss_fct=loss function to use, early_stopping=true if training should stop if test loss > train loss increases for 10 epochs, messages=true if messages should be printed
 function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=1000, 
     update_step=10, lera=0.001, beta=(0.9,0.999), lambda=0., 
@@ -164,7 +165,10 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
     #build leraning rate vector if lera_trend is a tuple
     if adapt_lera==true && lera_trend isa Tuple
         lera_vector = reverse(LinRange(lera_trend[1], lera, lera_trend[2]))
+    elseif adapt_lera==true && lera_trend isa Vector
+        lera_vector = lera_trend
     end
+
 
     # build trainstate according to Lux training
     #DatLoad = DataLoader((x,y), batchsize=batchsize, partial=false, shuffle=true) # from MLUtils; do not use on Slurm, f***s up everything
@@ -233,7 +237,7 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
                 messages && println("updating learning rate")
                 optimizer = AdamW(eta, beta, lambda)
                 train_state = Training.TrainState(train_state.model, train_state.parameters, train_state.states, optimizer)
-            elseif lera_trend isa Tuple && i / lera_update_step + 1 <= length(lera_vector)
+            elseif (lera_trend isa Tuple || lera_trend isa Vector) && i / lera_update_step + 1 <= length(lera_vector)
                 eta = lera_vector[Int(i / lera_update_step) + 1 ]
                 messages && println("updating learning rate")
                 optimizer = AdamW(eta, beta, lambda)
