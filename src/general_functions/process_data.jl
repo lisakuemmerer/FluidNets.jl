@@ -108,7 +108,7 @@ function preprocess(set; prep_pars=nothing)
 
     if prep_pars===nothing
         mins = [minimum(set[i,:]) for i in 1:nb]
-        ranges = [maximum(set[i,:])-minimum(x[i,:]) for i in 1:nb]
+        ranges = [maximum(set[i,:])-minimum(set[i,:]) for i in 1:nb]
         prep_pars = (mins, ranges)
     end
 

@@ -74,7 +74,7 @@ function compare_spectra_2D(part, K_func, NN; pt_min=0., pt_max=10., steps=100, 
     m_NN_std=Int(round(multi_NN[2]))
     
     annotate!(0.1, 1e-1, text(String("N_I=$m_I" * "±" * "$m_I_std\n" * "N_NN=$m_NN" * "±" * "$m_NN_std"), :left, 10))
-    plot!()
+    return plot!()
 end
 
 
@@ -118,7 +118,7 @@ function compare_spectra_4D(Tc, Tk, part, K_func, NN; pt_min=0., pt_max=10., ste
     m_NN_std=Int(round(multi_NN[2]))
     
     annotate!(0.1, 1e-1, text(String("N_I=$m_I" * "±" * "$m_I_std\n" * "N_NN=$m_NN" * "±" * "$m_NN_std"), :left, 10))
-    plot!()
+    return plot!()
 end
 
 export compare_spectra_2D, compare_spectra_4D

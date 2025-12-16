@@ -1,26 +1,28 @@
 using FluidNets
+using Plots
+using Fluidum
 
 # this block contains all the parameters that need to be adjusted
-var_dim, K_dim = 4,8; # number of variables & Kernels
-datapath = "/home/lisa/MA/Data/Full_PCE/Kernels/pion_thermal_BG.txt"; # path to datafile
+var_dim, K_dim = 4,52; # number of variables & Kernels
+datapath = "/home/lisa/MA/Data/Full_PCE/Kernels/pion_total_m0.txt"; # path to datafile
 savepath = "/home/lisa/MA/Final/parameter_tests/"; # path where output should be saved
-saveas = "yweight_uniform"; # name indicating what kind of model this is
+saveas = "pionm0"; # name indicating what kind of model this is
 # choose hyperparatemers, options explained in workflow.jl
 hyppars = Dict{Symbol, Any}(
     :n_train => 10000,
     :n_test => 10000,
     :uniform => true,
     :prep_vars => "minwidth",
-    :prep_K => "zeroabsmax", 
-    :nb_hl => 6,
-    :hl_dim => 128,
+    :prep_K => "none", 
+    :nb_hl => 7,
+    :hl_dim => 256,
     :act_fct => "sigmoid",
     :initializer_weight => "glorot_uniform",
-    :initializer_bias => "nothing",
+    :initializer_bias => "zeros",
     :batchsize => 100,
     :nepochs => 1000,
     :early_stopping => false,
-    :loss_fct => "yweight", 
+    :loss_fct => "mse", 
     :lera => 0.001,
     :adapt_lera => false,
     :lera_trend => 0.999,
@@ -28,17 +30,12 @@ hyppars = Dict{Symbol, Any}(
     :beta2 => 0.999, 
     :lambda => 0.0); 
 
-
-#save hyperparameter
-save_hyppars(hyppars, String(savepath*"stats_"*saveas*".txt"))
-
+####################################################################################
+# Training
 
 
 # load data
 var_set, K_set = read_data(datapath, var_dim, K_dim);
-
-# define interpolation of kernels to be able to compare prediction
-K_func = extrapolate_interpolate_kernels(var_set, K_set);
 
 # translate chosen hyperparameters
 scen = scenario_frontend_to_backend(hyppars, var_set, K_set);
@@ -57,27 +54,31 @@ batchsize=scen[:batchsize], nepochs=scen[:nepochs], early_stopping=scen[:early_s
 
 # plot learning curve
 learning_curve = plot_losses(trainloss, testloss)
-savefig(learning_curve, String(savepath*"learning_curve_"*saveas*".png"))
 
 # adds layers that include preprocessing
 NN = reprocess_model(my_NN, var_prep_pars=var_prep_pars,K_prep_pars=K_prep_pars);
-save_model(NN, String(savepath*"NN_"*saveas*".jld2"))
 
 
 
+#######################################################################################
+# Evaluation
+
+# define interpolation of kernels to be able to compare prediction
+K_func = extrapolate_interpolate_kernels(var_set, K_set);
 
 # compare the kernel network prediction & interpolation
 Kptur = compare_kernels_ptur(var_set, K_func, NN, 0.143, 0.125, show_mse=true)
-savefig(Kptur, String(savepath*"kernels_ptur_"*saveas*".png"))
 Ktemps = compare_kernels_temps(var_set, K_func, NN, 1.5, 1.5, show_mse=true)
-savefig(Ktemps, String(savepath*"kernels_temps_"*saveas*".png"))
 
 # compare spectra calculated with network prediction & interpolation
-spec = compare_spectra_4D(0.143, 0.125, dic.pion, K_func, NN; pt_min=0., pt_max=3.7)
-savefig(spec, String(savepath*"spectra_"*saveas*".png"))
+spec = compare_spectra_4D(0.143, 0.125, dic.protonfiller, K_func, NN; pt_min=0., pt_max=3.7)
 
+#######################################################################################
+# Saving output & model
 
-
-
-
-
+save_hyppars(hyppars, String(savepath*"stats_"*saveas*".txt"));
+save_model(NN, String(savepath*"NN_"*saveas*".jld2"));
+savefig(learning_curve, String(savepath*"learning_curve_"*saveas*".png"));
+savefig(Kptur, String(savepath*"kernels_ptur_"*saveas*".png"));
+savefig(Ktemps, String(savepath*"kernels_temps_"*saveas*".png"));
+savefig(spec, String(savepath*"spectra_"*saveas*".png"));

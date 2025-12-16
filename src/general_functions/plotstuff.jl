@@ -38,11 +38,12 @@ end
 
 # plots 8 kernels in 2d
 function _plot_sorted_kernels_2d(var_set, K_set, K_labels; labels = ["pT", "uʳ"], title="", surface=true)
-    p = [_plot_sorted_kernel_2d(var_set, K_set, i, title=K_labels[i], labels=labels, surface=surface) for i in axes(K_set,1)]
+    p = [_plot_sorted_kernel_2d(var_set, K_set, i, title=K_labels[i], labels=labels, surface=surface) for i in axes(K_set,1)][1:8]
     if surface
         pl = plot(p..., layout=(2,4), size=(2000,1000), plot_title=title)
     else
         pl = plot(p..., layout=(2,4), size=(3000,1000), left_margin=20*Plots.mm, bottom_margin=20*Plots.mm, plot_title=title)
+        #pl = plot(p...)
     end
     return pl
 end

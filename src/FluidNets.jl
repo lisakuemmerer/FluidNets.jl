@@ -32,7 +32,7 @@ export read_data, get_mean_std, get_mid_halfwidth, get_min_width, get_zero_absma
 export extrapolate_interpolate_kernels, Kernels
 export MyXweightLoss, MyYweightLoss, leakyrelu_grad
 export scenario_frontend_to_backend, trials, save_trials, load_trials, merge_trials, save_hyppars
-export sortby, get_options, get_count_in_best_trials, get_mean_result, plot_hyppar, plot_course_in_best_trials, plot_all_hyppars, plot_correlation
+export sortby, get_options, hist_loss, get_count_in_best_trials, get_mean_result, plot_hyppar, plot_course_in_best_trials, plot_all_hyppars, plot_correlation, hist_occurance, hist_correlation_occurance
 export plot_losses, plot_sorted_kernels_ptur, plot_sorted_kernels_temps, compare_kernels_ptur, compare_kernels_temps
 
 

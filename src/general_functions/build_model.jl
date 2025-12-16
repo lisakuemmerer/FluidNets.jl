@@ -195,8 +195,8 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
         push!(train_loss[2], epoch_train_loss)
         push!(train_loss[1], i)
 
-        # test for fuck up - happens sometimes ? maybe problem with multithreading ?
-        if isnan(epoch_train_loss) 
+        # test for fuck up - happens sometimes for bad hyperparameter choices
+        if isnan(epoch_train_loss) && i>=update_step+1
             println("model broke")
             break
         end

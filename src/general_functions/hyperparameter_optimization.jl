@@ -165,13 +165,21 @@ end
 
 
 
+# helper function to have nicer time formats
+function _format_seconds(seconds)
+    h = div(seconds, 3600)
+    m = div(rem(seconds, 3600), 60)
+    s = rem(seconds, 60)
+    return string(lpad(Int(h), 2, "0"), ":", lpad(Int(m), 2, "0"), ":", lpad(round(Int, s), 2, "0"))
+end
+
 
 
 # try the objective function _trial() #num_trials times with parameters taken form scens
 # scens needs to be Dictionary with hyperparameters & options
 # hyperparameters need to be correctly unpacked in trial() as entered in scens
 # excepts: remove impossible combinations. form: [p->p[:h1]==a && p[:h2]==b] will remove all combinations where scen[:h1]=a and scen[:h2]=b
-function trials(scens, var_set, K_set; excepts=[], num_trials=100)
+function trials(scens, var_set, K_set; excepts=[], num_trials=100, multithread=true)
     
     t0 = time()
 
@@ -186,15 +194,27 @@ function trials(scens, var_set, K_set; excepts=[], num_trials=100)
 
     t1 = time()
 
-    trial_vec = []
-    Threads.@threads for i in 1:num_trials
-        println("\n Starting trial ", i, "\n")
-        push!(trial_vec, _trial(opts_to_try[i], var_set, K_set))
-        println("Finished trial $(i); $(time()-t1)s")
+    trial_vec = Vector{Any}(undef, num_trials)
+    if multithread
+        thread_task_counts = zeros(Int, Threads.nthreads())
+        Threads.@threads for i in 1:num_trials
+            tid = Threads.threadid()-1
+            thread_task_counts[tid] += 1
+            local_task_num = thread_task_counts[tid]
+            println("Starting trial ", tid, ".", local_task_num)
+            trial_vec[i] = _trial(opts_to_try[i], var_set, K_set)
+            println("Finished trial $(tid).$(local_task_num); $(_format_seconds(time()-t1))")
+        end
+    else
+        for i in 1:num_trials
+            println("Starting trial ", i)
+            trial_vec[i] = _trial(opts_to_try[i], var_set, K_set)
+            println("Finished trial $(i); $(_format_seconds(time()-t1))")
+        end
     end
     
-    println("Time for trials: $(time()-t1)s")
-    println("Complete runtime: $(time()-t0)s")
+    println("Time for trials: $(_format_seconds(time()-t1))")
+    println("Complete runtime: $(_format_seconds(time()-t0))")
 
     # return: array of dictionaries containing the hyperparameters and loss output of each option
     return trial_vec
@@ -217,12 +237,15 @@ end
 
 
 
-# merge trial files of directory to one file
-function merge_trials(direct, filename)
+# merge trial files of directory to one file with option of removing double entries
+function merge_trials(direct, filename; hyppars=nothing)
     filelist = readdir(direct)
     trials = reduce(vcat, [load_trials(String(direct*f))[:] for f in filelist])
+    hyppars!==nothing && (trials=unique(d -> Tuple(d[k] for k in hyppars), sort(trials, by = x->x[:endloss])))
     save_trials(trials, direct*filename)
 end
+
+
 
 
 # funtion to save one hyperparameter choice readable
@@ -277,6 +300,17 @@ function get_options(Trials, hyppars; verific=:endloss)
     length(scen) == 1 && (scen = first(values(scen)))
 
     return scen
+end
+
+# function to make a histogram of of endloss for different hyperparameter choices
+function hist_loss(hyppar, Trials; trialmax=nothing, verific=:endloss)
+    trialmax===nothing && (trialmax=length(Trials))
+    t = sortby(Trials, verific=verific)[1:trialmax]
+    vs = get_options(t, hyppar)
+    l_max = t[end][verific]
+    l_min = t[1][verific]
+    h = [histogram([t[verific] for t in filter(t->t[hyppar]==v,t)], label="", bins=10, title=v, xlims=(l_min, l_max)) for v in vs]
+    return plot(h..., ylims=(0,maximum([ylims(h)[2] for h in h])), plot_title="$(String(verific)) occurence for $(String(hyppar))")
 end
 
 
@@ -374,6 +408,44 @@ end
 
 
 
+# function that histogramms occurance of hyperparameter choice in dataset (makes sense to use on ...best/worst trials)
+function hist_occurance(hyppar, Trials; verific=:endloss, trialmax=nothing)
+    trialmax===nothing && (trialmax=length(Trials))
+    counts = countmap([t[hyppar] for t in sortby(Trials, verific=verific)[1:trialmax]])
+    bar(collect(keys(counts)), collect(values(counts)),title="Frequency",ylabel="Count",legend=false)
+end
+
+
+
+
+# function that histogramms occurance of two hyperparameter choices in dataset (makes sense to use on ...best/worst trials)
+function hist_correlation_occurance(h1, h2, Trials; verific=:endloss, trialmax=nothing)
+    trialmax===nothing && (trialmax=length(Trials))
+    Trials = sortby(Trials, verific=verific)[1:trialmax]
+
+    # Get all unique values for both hyperparameters
+    v1 = unique([t[h1] for t in Trials])
+    v2 = unique([t[h2] for t in Trials])
+    
+    # Create a matrix to store counts
+    counts = zeros(Int, length(v2), length(v1))
+    
+    # Fill the matrix
+    for (i, val2) in enumerate(v2)
+        for (j, val1) in enumerate(v1)
+            counts[i, j] = count(t -> t[h1] == val1 && t[h2] == val2, Trials)
+        end
+    end
+    
+    # Plot heatmap
+    heatmap(string.(v1), string.(v2), counts, 
+            xlabel=String(h1), ylabel=String(h2), 
+            title="Co-occurrence Frequency", c=:viridis)
+end
+
+
+
+
 
 ##############################################################################################################
 # OTHER STUFF: test scenarios deeper ( might not work anymore ? )
@@ -398,8 +470,8 @@ function run_all_trials(scen_vec; hyppars=nothing)
         println("\n Finished trial ", i, "\n")
     end
     
-    println("\n time for trials: ", time()-t1, "s")
-    println("\n complete runtime: ", time()-t0, "s \n")
+    println("\n time for trials: ", _format_seconds(time()-t1))
+    println("\n complete runtime: ", _format_seconds(time()-t0), " \n")
 
     # return: array of dictionaries containing the hyperparameters and loss output of each option
     return trial_vec
