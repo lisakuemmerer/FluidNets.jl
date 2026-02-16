@@ -196,18 +196,16 @@ function trials(scens, var_set, K_set; excepts=[], num_trials=100, multithread=t
 
     trial_vec = Vector{Any}(undef, num_trials)
     if multithread
-        thread_task_counts = zeros(Int, Threads.nthreads())
-        Threads.@threads for i in 1:num_trials
-            tid = Threads.threadid()-1
-            thread_task_counts[tid] += 1
-            local_task_num = thread_task_counts[tid]
-            println("Starting trial ", tid, ".", local_task_num)
+        counter = 0
+        Threads.@threads :dynamic for i in 1:num_trials
+            println("Starting new trial $i")
             trial_vec[i] = _trial(opts_to_try[i], var_set, K_set)
-            println("Finished trial $(tid).$(local_task_num); $(_format_seconds(time()-t1))")
+            counter += 1
+            println("Finished trial $i (global $counter); $(_format_seconds(time()-t1))")
         end
     else
         for i in 1:num_trials
-            println("Starting trial ", i)
+            println("Starting trial $i")
             trial_vec[i] = _trial(opts_to_try[i], var_set, K_set)
             println("Finished trial $(i); $(_format_seconds(time()-t1))")
         end
@@ -215,7 +213,6 @@ function trials(scens, var_set, K_set; excepts=[], num_trials=100, multithread=t
     
     println("Time for trials: $(_format_seconds(time()-t1))")
     println("Complete runtime: $(_format_seconds(time()-t0))")
-
     # return: array of dictionaries containing the hyperparameters and loss output of each option
     return trial_vec
 end
@@ -223,9 +220,14 @@ end
 
 
 
-# save & load array of many small dics without trainstate
-function save_trials(trialarray, filename)
+# save & load array of many small dics without trainstate, 
+# can be given directory (which it will mkae if non-existent
+# if no filename is specified a random 8 number string will be used so that script can be rerun without overwriting
+function save_trials(trialarray; savepath="./", filename="trial_"*randstring("0123456789", 8)*".jld2")
+    isdir(savepath) || mkpath(savepath)
+    filename = savepath*filename
     @save filename trialarray
+    println("Saved as $filename")
 end
 
 
@@ -242,7 +244,7 @@ function merge_trials(direct, filename; hyppars=nothing)
     filelist = readdir(direct)
     trials = reduce(vcat, [load_trials(String(direct*f))[:] for f in filelist])
     hyppars!==nothing && (trials=unique(d -> Tuple(d[k] for k in hyppars), sort(trials, by = x->x[:endloss])))
-    save_trials(trials, direct*filename)
+    save_trials(trials, savepath=direct, filename=filename)
 end
 
 
@@ -302,42 +304,66 @@ function get_options(Trials, hyppars; verific=:endloss)
     return scen
 end
 
-# function to make a histogram of of endloss for different hyperparameter choices
-function hist_loss(hyppar, Trials; trialmax=nothing, verific=:endloss)
-    trialmax===nothing && (trialmax=length(Trials))
-    t = sortby(Trials, verific=verific)[1:trialmax]
-    vs = get_options(t, hyppar)
-    l_max = t[end][verific]
-    l_min = t[1][verific]
-    h = [histogram([t[verific] for t in filter(t->t[hyppar]==v,t)], label="", bins=10, title=v, xlims=(l_min, l_max)) for v in vs]
-    return plot(h..., ylims=(0,maximum([ylims(h)[2] for h in h])), plot_title="$(String(verific)) occurence for $(String(hyppar))")
-end
 
-
-# function to get
-function get_count_in_best_trials(h, Trials; trialmax=nothing, verific=:endloss)
+# number of occurance for hyperparameter choice in dataset (makes sense on ...best trials)
+function _get_count_in_best_trials(h, Trials; trialmax=nothing, verific=:endloss)
     trialmax===nothing && (trialmax=length(Trials))
     return countmap([t[h] for t in sortby(Trials, verific=verific)[1:trialmax]])
 end
 
 
-# function to get mean result of hyperparameter choice
-function get_mean_result(h, Trials; trialmax=nothing, verific=:endloss)
+# mean loss of hyperparameter choices 
+function _get_mean_result(h, Trials; trialmax=nothing, verific=:endloss)
     trialmax===nothing && (trialmax=length(Trials))
     Dict{Any,Any}(v=>mean(t[verific] for t in filter(t->t[h]==v, sortby(Trials, verific=verific)[1:trialmax])) for v in get_options(Trials,h))
 end
 
 
-# function to plot one hyperparameter with result
-function plot_hyppar(hyppar, Trials; trialmax=nothing, xscale=:identity, yscale=:log10, verific=:endloss)
+
+
+
+# histogram loss for hyperparameter choices
+function hist_loss(hyppar, Trials; trialmax=nothing, verific=:endloss, title=nothing)
+    isnothing(title) && (title=hyppar)
     trialmax===nothing && (trialmax=length(Trials))
-    Trials = sortby(Trials, verific=verific)[1:trialmax]
-    plot([t[hyppar] for t in Trials], [t[verific] for t in Trials], st=:scatter, xscale=xscale, yscale=yscale, title=String(hyppar), ylabel=String(verific), label="")
+    t = sortby(Trials, verific=verific)[1:trialmax]
+    vs = get_options(t, hyppar)
+    l_max = t[end][verific]
+    l_min = t[1][verific]
+    h = [histogram([t[verific] for t in filter(t->t[hyppar]==v,t)], xlabel=String(verific), ylabel="counts", label="", bins=10, title=v, xlims=(l_min, l_max)) for v in vs]
+    return plot(h..., ylims=(0,maximum([ylims(h)[2] for h in h])), plot_title=title)
 end
 
 
-# function to plot the course of how often a hyperparameterchoice makes it to the best trials
-function plot_course_in_best_trials(hyppar, Trials; trialmax=nothing, verific=:endloss)
+# scatter loss for hyperparameter choices
+function plot_hyppar(hyppar, Trials; trialmax=nothing, xscale=:identity, yscale=:log10, verific=:endloss, title="")
+    trialmax===nothing && (trialmax=length(Trials))
+    Trials = sortby(Trials, verific=verific)[1:trialmax]
+    means = _get_mean_result(hyppar, Trials; trialmax=trialmax, verific=verific)
+    plot([t[hyppar] for t in Trials], [t[verific] for t in Trials], st=:scatter, xscale=xscale, yscale=yscale, title=title, xlabel=String(hyppar), ylabel=String(verific), label="")
+    plot!([k for k in keys(means)], [v for v in values(means)], st=:scatter, label="")
+end
+
+
+# histogram the resulting loss of one hyperparameter in 2D
+function hist_hyppar(hyppar, Trials; trialmax=nothing, verific=:endloss, b=10, title="")
+    trialmax===nothing && (trialmax=length(Trials))
+    Trials = sortby(Trials, verific=verific)[1:trialmax]
+
+    x_opts = get_options(Trials, hyppar)
+    x_map = Dict(val => i for (i, val) in enumerate(x_opts))
+    x_indices = [x_map[x] for x in  [t[hyppar] for t in Trials]]
+
+    y = [t[verific] for t in Trials]
+    log_bins = 10 .^range(minimum(log10.(y)), maximum(log10.(y)), length=b)
+
+    histogram2d(x_indices, y, yscale=:log10, xticks=(1:length(x_opts), x_opts), bins = (0.5:1:length(x_opts)+0.5, log_bins),title=title, label="", xlabel=String(hyppar), ylabel=String(verific), colorbar_title="counts")
+end
+
+
+# plot the course of how often a hyperparameterchoice makes it to the best trials
+function plot_course_in_best_trials(hyppar, Trials; trialmax=nothing, verific=:endloss, title=nothing)
+    isnothing(title) && (title=hyppar)
     trialmax===nothing && (trialmax=length(Trials))
     # sort trials
     Trials_sorted = sortby(Trials, verific=verific)
@@ -352,30 +378,44 @@ function plot_course_in_best_trials(hyppar, Trials; trialmax=nothing, verific=:e
     series_colors = reshape([cgrad(:viridis)[z] for z in range(0, 1, length=length(vs))], 1, length(vs))
 
     p = return plot(n, [d[v].(n)/d[v](length(Trials))*100 for v in vs], labels=reduce(hcat,vs), seriescolor = series_colors,
-    xlabel="number of best trials", ylabel="% in best trials", title=String(hyppar))
+    xlabel="number of best trials", ylabel="% in best trials", title=title)
 
     return p
 end
 
 
-# function that plots above plots for all hyppars at once
+# histogramm occurance of hyperparameter choice in dataset (makes sense to use on ...best/worst trials)
+function hist_occurance(hyppar, Trials; verific=:endloss, trialmax=nothing, title=nothing)
+    isnothing(title) && (title=hyppar)
+    trialmax===nothing && (trialmax=length(Trials))
+    counts = countmap([t[hyppar] for t in sortby(Trials, verific=verific)[1:trialmax]])
+    bar(collect(keys(counts)), collect(values(counts)),title=title,ylabel="Count",legend=false)
+end
+
+
+
+
+# plot above plots for all hyppars at once
 function plot_all_hyppars(f, hyppars, Trials; kwargs...)
     # number of hyppars -> size of plot
     n = div(length(hyppars), 3, RoundUp)
     
     # extract plottitle if given
-    title = get(kwargs, :title, "") 
+    plottitle = get(kwargs, :title, "") 
 
     # make tuple out of remaining kwargs
-    inner_kwargs = NamedTuple(p for p in kwargs if p.first != :title)
+    inner_kwargs = NamedTuple(p for p in kwargs if p.first != :plottitle)
 
     # plot all hyperparameters
-    plot([f(h, Trials; inner_kwargs...) for h in hyppars]..., layout=(n, 3), size=(n * 500, 1800), left_margin=10*Plots.mm, bottom_margin=10*Plots.mm, plot_title=title)
+    plot([f(h, Trials; inner_kwargs...) for h in hyppars]..., layout=(n, 3), size=(n * 500, 1800), left_margin=10*Plots.mm, bottom_margin=10*Plots.mm, plot_title=plottitle)
 end
 
 
-# function to plot the correlation of two hyperparameters h1,h2
-function plot_correlation(h1, h2, Trials; trialmax=nothing, verific=:endloss, xscale=:identity, yscale=:identity, log_res=true)
+
+
+
+# histogram the mean result for correlation of two hyperparameters h1,h2 in 2D
+function plot_correlation(h1, h2, Trials; trialmax=nothing, verific=:endloss, xscale=:identity, yscale=:identity, log_res=true, title="")
 
     trialmax===nothing && (trialmax=length(Trials))
     Trials=sortby(Trials, verific=verific)[1:trialmax]
@@ -396,30 +436,18 @@ function plot_correlation(h1, h2, Trials; trialmax=nothing, verific=:endloss, xs
     #plot with corresponding options
     if log_res
         p =  heatmap(v1,v2, log10.(Comb), xscale=xscale, yscale=yscale, 
-        xlabel=String(h1), ylabel=String(h2), colorbar_title="$(String(verific)) (logarithmic)", c=:viridis)
+        xlabel=String(h1), ylabel=String(h2), colorbar_title="mean $(String(verific)) (logarithmic)", c=:viridis, title=title)
     else
         p = heatmap(v1,v2, Comb, xscale=xscale, yscale=yscale, 
-        xlabel=String(h1), ylabel=String(h2), colorbar_title=String(verific), c=:viridis)
+        xlabel=String(h1), ylabel=String(h2), colorbar_title="mean $(String(verific))", c=:viridis, title=title)
     end
 
     return p
 end
 
 
-
-
-# function that histogramms occurance of hyperparameter choice in dataset (makes sense to use on ...best/worst trials)
-function hist_occurance(hyppar, Trials; verific=:endloss, trialmax=nothing)
-    trialmax===nothing && (trialmax=length(Trials))
-    counts = countmap([t[hyppar] for t in sortby(Trials, verific=verific)[1:trialmax]])
-    bar(collect(keys(counts)), collect(values(counts)),title="Frequency",ylabel="Count",legend=false)
-end
-
-
-
-
-# function that histogramms occurance of two hyperparameter choices in dataset (makes sense to use on ...best/worst trials)
-function hist_correlation_occurance(h1, h2, Trials; verific=:endloss, trialmax=nothing)
+# histogramms occurance of two hyperparameter choices in dataset (makes sense to use on ...best/worst trials) in 2D
+function hist_correlation_occurance(h1, h2, Trials; verific=:endloss, trialmax=nothing, title="")
     trialmax===nothing && (trialmax=length(Trials))
     Trials = sortby(Trials, verific=verific)[1:trialmax]
 
@@ -440,7 +468,7 @@ function hist_correlation_occurance(h1, h2, Trials; verific=:endloss, trialmax=n
     # Plot heatmap
     heatmap(string.(v1), string.(v2), counts, 
             xlabel=String(h1), ylabel=String(h2), 
-            title="Co-occurrence Frequency", c=:viridis)
+            title=title, c=:viridis, colorbar_title="counts")
 end
 
 

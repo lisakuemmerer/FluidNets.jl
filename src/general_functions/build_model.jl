@@ -195,12 +195,6 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
         push!(train_loss[2], epoch_train_loss)
         push!(train_loss[1], i)
 
-        # test for fuck up - happens sometimes for bad hyperparameter choices
-        if isnan(epoch_train_loss) && i>=update_step+1
-            println("model broke")
-            break
-        end
-
         # test on testset
         if i%update_step == 0
             epoch_test_loss,_,_ = loss_fct(train_state.model, train_state.parameters, train_state.states, (x_test, y_test))
@@ -208,6 +202,13 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
             push!(test_loss[1], i+1)
             t = time()
             messages && println("after ", i, " epochs: time ", t-t0, " s, trainloss: ", epoch_train_loss, ", testloss (updated): ", epoch_test_loss)
+        end
+
+        # test for fuck up - happens sometimes for bad hyperparameter choices
+        if isnan(epoch_test_loss)
+            println("model broke")
+            overfit = "broken"
+            break
         end
         
         # compare testloss/trainloss for early stopping

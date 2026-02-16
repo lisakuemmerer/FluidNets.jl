@@ -1,5 +1,6 @@
 using FluidNets
-using Random
+
+#sometimes there seems to be an error with multithreading. this command fixes that
 using LinearAlgebra
 BLAS.set_num_threads(1)
 
@@ -8,11 +9,11 @@ BLAS.set_num_threads(1)
 # the 'trial' function will be called for different options defined below by the 'trials' function
 
 # path to where your dataset
-in_file = "/home/lisa/MA/Data/Full_PCE/Kernels/pion_total_BG.txt";
+in_file = "/home/lisa/MA/Data/Full_PCE/Kernels/pion_total_m0.txt";
 # path to where you want to save output
-out_path = "/home/lisa/MA/Final/hyperopt/pion_total/";
+out_path = "/home/lisa/MA/Final/hyperopt/pion_total_m0/";
 #number of variables & Kernels
-var_dim, K_dim = 4, 8;
+var_dim, K_dim = 4, 52;
 
 
 ################################################################################################################
@@ -25,8 +26,8 @@ var_set, K_set = read_data(in_file, var_dim, K_dim);
 # if you want to evaluate different hyperparameters you need to adjust the trial function accordingly
 scens = Dict{Symbol, Any}(:prep_vars => ["none", "minwidth", "midhalfwidth", "meanstd"],
     :prep_K => ["none", "minwidth", "midhalfwidth", "zeroabsmax"], 
-    :nb_hl => [4,5,6,7], 
-    :hl_dim => [32,64,128,256], 
+    :nb_hl => [4,5,6,7,8], 
+    :hl_dim => [32,64,128,256,512], 
     :act_fct => ["sigmoid", "tanh", "relu", "leakyrelu_001", "leakyrelu_01"], 
     :initializer_weight => ["glorot_normal", "glorot_uniform", "kaiming_normal", "kaiming_uniform", "nothing"],
     :initializer_bias => ["glorot_normal", "glorot_uniform", "kaiming_normal", "kaiming_uniform", "nothing", "zeros"],
@@ -46,9 +47,14 @@ scens = Dict{Symbol, Any}(:prep_vars => ["none", "minwidth", "midhalfwidth", "me
 
 # # DO NOT UNCOMMENT UNLESS WANTED, RUNS FOR MULTIPLE HOURS !!!
 # # function will call trial-function and run #num_trials options from scen without excepts
-trial_all = trials(scens, var_set, K_set, num_trials=1280);
+trial_all = trials(scens, var_set, K_set, num_trials=80);
 
+
+count(t->t[:overfit]=="broken", trial_all)
 
 # save the trials to file with random name so that script can be rerun
-isdir(out_path) || mkpath(out_path)
-save_trials(trial_all, String(out_path*"trial_"*randstring("0123456789", 8)*".jld2"))
+save_trials(trial_all, savepath=out_path)
+
+# # merge trials when you ran enough
+# merge_trials(out_path, "trial_all.jld2", hyppars=keys(scens))
+# load_trials(String(out_path*"trial_all.jld2"))

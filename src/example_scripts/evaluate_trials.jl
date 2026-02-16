@@ -1,68 +1,107 @@
 using FluidNets
 
-Trials = load_trials("/home/lisa/MA/Final/hyperopt/pion_thermal/trials_all.jld2");
+Trials = load_trials("/home/lisa/MA/Final/hyperopt/pion_total/trial_all.jld2");
 
-# # remove double hyppar options - only needed the first time
-# unique_entries = unique(d -> Tuple(d[k] for k in hyppars), sort(Trials, by = x->x[:endloss]))
-# # get even count of options
-# Trials = Trials[shuffle([i for i in eachindex(Trials)])][5000]
 
 # get hyppars & results
-results = [:endloss, :improv, :tft, :overfit] 
-hyppars = [h for h in filter(!(k->k in results || k==:loss_fct), keys(first(Trials)))]
+results = [:endloss, :improv, :tft, :overfit] ;
+hyppars = [h for h in filter(!(k->k in results || k==:loss_fct), keys(first(Trials)))];
 scen = get_options(Trials, hyppars)
- 
 
-#########################
+
+
+
+##################################################################################################################
 # evaluate
 # :improv should be used as verific when different loss functions are compared
 
 # best trial:
 sortby(Trials)[1]
 
-# result of all / best 100 trials
+# best 5 Trials:
+sT = sortby(Trials)[1:5]
+for s in keys(sT[1])
+    println(s, " ", [T[s] for T in sT])
+end
+
+
+
+
+
+#################################################################################################################
+# split "broken" trials
+
+# Trials_broken = filter(t->t[:overfit]=="broken", Trials)
+# Trials = filter(!(t->t[:overfit]=="broken"), Trials)
+
+Trials_broken = filter(t->isnan(t[:endloss]), Trials)
+Trials = filter(!(t->isnan(t[:endloss])), Trials)
+
+
+########
+
+# plot occurance of parameter choices in the 'broken' Trials
+plot_all_hyppars(hist_occurance, hyppars, Trials_broken)
+
+
+# plot occurance for corraltion of two hyppars
+hist_correlation_occurance(:nb_hl, :hl_dim, Trials_broken)
+# # plot occurance in 2d correlation for all combinations -- loops over 144 plots, takes a looooong time -- 
+# for h1 in hyppars
+#     for h2 in filter(!(x->x==h1), hyppars)
+#         p = hist_correlation_occurance(h1,h2,Trials_broken)
+#         display(p)
+#         sleep(3)
+#     end
+# end
+
+
+
+
+
+
+#################################################################################################################
+# evaluate working trials
+
+
+# scatter loss for all choices (all / best 100)
 plot_all_hyppars(plot_hyppar, hyppars, Trials, title="all hyppars")
 plot_all_hyppars(plot_hyppar, hyppars, Trials, title="all hyppars", trialmax=100)
 
-# percentage in best trials (all / best 100)
+# percentage course in best trials (all / best 100)
 plot_all_hyppars(plot_course_in_best_trials, hyppars, Trials, title="all hyppars")
 plot_all_hyppars(plot_course_in_best_trials, hyppars, Trials, title="all hyppars", trialmax=100)
 
-# correlation
-plot_correlation(:prep_vars, :prep_K, Trials)
-plot_correlation(:hl_dim, :nb_hl, Trials)
-plot_correlation(:initializer_weight, :initializer_bias, Trials)
-plot_correlation(:lera, :lambda, Trials)
-plot_correlation(:beta1, :beta2, Trials)
-plot_correlation(:act_fct, :batchsize, Trials, yscale=:log10)
-plot_correlation(:act_fct, :initializer_bias, Trials)
+
+# histogramm loss for all choices
+plot_all_hyppars(hist_hyppar, hyppars, Trials)
 
 
-# mean result
-get_mean_result(:hl_dim, Trials)
-get_mean_result(:nb_hl, Trials)
-get_mean_result(:batchsize, Trials)
-get_mean_result(:initializer_weight, Trials)
-get_mean_result(:initializer_bias, Trials)
-get_mean_result(:prep_vars, Trials)
-get_mean_result(:prep_K, Trials)
-
-# count in best 100 trials
-get_count_in_best_trials(:hl_dim, Trials, trialmax=100)
-get_count_in_best_trials(:nb_hl, Trials, trialmax=100)
-get_count_in_best_trials(:batchsize, Trials, trialmax=100)
-get_count_in_best_trials(:initializer_weight, Trials, trialmax=100)
-get_count_in_best_trials(:initializer_bias, Trials, trialmax=100)
-get_count_in_best_trials(:prep_vars, Trials, trialmax=100)
-get_count_in_best_trials(:prep_K, Trials, trialmax=100)
+# histogramm occurence of choice in best 100 trials
+plot_all_hyppars(hist_occurance, hyppars, Trials, trialmax=100)
 
 
-# loss distribution for parameter choice
-hist_loss(:act_fct, Trials, trialmax=100)
+# mean result for correlation
+plot_correlation(:nb_hl, :hl_dim, Trials)
+# # plot mean of loss for correlation of all combintaions -- loops over 144 plots, takes a looooong time -- 
+# for h1 in hyppars
+#     for h2 in filter(!(x->x==h1), hyppars)
+#         p = plot_correlation(h1,h2,Trials)
+#         display(p)
+#         sleep(3)
+#     end
+# end
 
-# occurence in best 100 trials
-hist_occurance(:act_fct, Trials, trialmax=100)
 
-# correlation occurence in best 100 trials
-hist_correlation_occurance(:lera, :prep_K, Trials, trialmax=100)
+# correlation of occurance in best 100 trials
+hist_correlation_occurance(:nb_hl, :hl_dim, Trials, trialmax=100)
+# # histogramm correlating occurence in best 100 trials for all combintaions-- loops over 144 plots, takes a looooong time -- 
+# for h1 in hyppars
+#     for h2 in filter(!(x->x==h1), hyppars)
+#         p = hist_correlation_occurance(h1,h2,Trials, trialmax=100)
+#         display(p)
+#         sleep(3)
+#     end
+# end
+
 
