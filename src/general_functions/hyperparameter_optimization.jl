@@ -401,7 +401,7 @@ function plot_all_hyppars(f, hyppars, Trials; kwargs...)
     n = div(length(hyppars), 3, RoundUp)
     
     # extract plottitle if given
-    plottitle = get(kwargs, :title, "") 
+    plottitle = get(kwargs, :plottitle, "") 
 
     # make tuple out of remaining kwargs
     inner_kwargs = NamedTuple(p for p in kwargs if p.first != :plottitle)
@@ -451,9 +451,8 @@ function hist_correlation_occurance(h1, h2, Trials; verific=:endloss, trialmax=n
     trialmax===nothing && (trialmax=length(Trials))
     Trials = sortby(Trials, verific=verific)[1:trialmax]
 
-    # Get all unique values for both hyperparameters
-    v1 = unique([t[h1] for t in Trials])
-    v2 = unique([t[h2] for t in Trials])
+    # Get all unique values for both hyperparameterss
+    v1,v2 = values(get_options(Trials, [h1,h2], verific=verific))
     
     # Create a matrix to store counts
     counts = zeros(Int, length(v2), length(v1))
@@ -469,6 +468,24 @@ function hist_correlation_occurance(h1, h2, Trials; verific=:endloss, trialmax=n
     heatmap(string.(v1), string.(v2), counts, 
             xlabel=String(h1), ylabel=String(h2), 
             title=title, c=:viridis, colorbar_title="counts")
+end
+
+
+# loop over all 2D combis for one hyperparameter
+function loop_one_2D(f, hyppar, hyppars, Trials; trialmax=nothing)
+    for h in filter(h->h!=hyppar, hyppars)
+        display(f(hyppar, h, Trials, trialmax=trialmax))
+    end
+end
+
+
+# loop over all combinations
+function loop_all_2D(f, hyppars, Trials; trialmax=nothing)
+    for i in eachindex(hyppars)
+        for j in i+1:length(hyppars)
+                display(f(hyppars[i], hyppars[j], Trials, trialmax=trialmax))
+        end
+    end
 end
 
 

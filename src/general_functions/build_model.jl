@@ -150,29 +150,37 @@ end
 
 # train model on dataset x=variables, y=true Kernels, NN_init as initialized by initiate_model
 # x_test, y_test = independent test set, batchsize=number of datapoints in one batch, nepochs=number of epochs to train,
-# update_step=number of epochs after which test loss is calculated, lera=learning rate, beta,lambda=AdamW parameters,
+# update_step=number of epochs after which test loss is calculated, loss_fct=loss function to use, 
+# lera=learning rate, beta,lambda,couple=AdamW parameters,
 # adapt_lera=true if learning rate should be adapted, lera_update_step=number of epochs after which learning rate is updated,
 # lera_trend=trend of learning rate. options:
 # ---scalar: 0.999 for 0.1% decrease every #lera_update_steps epochs
-# ---tuple: interpreted as (end, number of steps) and the learning rate is linearly interpolated between input lera, lera_trend[1] with lera_trend[2] steps. after this the last value lera_trend[1] is used until training ends
+# ---tuple: ("lin" or "log", end, steps) will give #"steps" between "lera" and "end" with linear/logarithmic spacing
 # ---vector: custom vector, i.e 10.^LinRange(-2,-4,100) for logarithmic decrease. start should coincide with lera
-# loss_fct=loss function to use, early_stopping=true if training should stop if test loss > train loss increases for 10 epochs, messages=true if messages should be printed
+# --- fot tuple/vector: the last value will be repeated for the remaining training if n_epochs > lera_update_step*lngth(lera_vector)
+# early_stopping=true if training should stop if test loss > train loss for 10 instances
+# patience=true if training should stop if testloss increases for 10 instances
+# messages = true if messages should be printed, optim_mode = true for more output values
 function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=1000, 
-    update_step=10, lera=0.001, beta=(0.9,0.999), lambda=0., 
+    update_step=10, lera=0.001, beta=(0.9,0.999), lambda=0., couple=true,
     adapt_lera=false, lera_update_step=10, lera_trend=0.999,
-    loss_fct=MSELoss(), early_stopping=true, messages=true, optim_mode=false)
+    loss_fct=MSELoss(), early_stopping=true, patience=true, messages=true, optim_mode=false)
 
     #build leraning rate vector if lera_trend is a tuple
     if adapt_lera==true && lera_trend isa Tuple
-        lera_vector = reverse(LinRange(lera_trend[1], lera, lera_trend[2]))
+        if lera_trend[1]=="lin"
+            lera_vector = reverse(LinRange(lera_trend[2], lera, lera_trend[3]))
+        elseif lera_trend[1] == "log"
+            lera_vector = 10 .^LinRange(log10(lera), log10(lera_trend[2]), lera_trend[3])
+        end
     elseif adapt_lera==true && lera_trend isa Vector
         lera_vector = lera_trend
     end
 
 
     # build trainstate according to Lux training
-    #DatLoad = DataLoader((x,y), batchsize=batchsize, partial=false, shuffle=true) # from MLUtils; do not use on Slurm, f***s up everything
-    train_state = Training.TrainState(NN_init.model, NN_init.parameters, NN_init.states, AdamW(lera,beta,lambda))
+    DatLoad = DataLoader((x,y), batchsize=batchsize, partial=false, shuffle=true) # from MLUtils; do not use on Slurm, f***s up everything
+    train_state = Training.TrainState(NN_init.model, NN_init.parameters, NN_init.states, AdamW(lera,beta, lambda, couple=couple))
     
     # calculate initial loss
     in_loss,_,_ = loss_fct(train_state.model, train_state.parameters, train_state.states, (x, y))
@@ -182,8 +190,9 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
     train_loss = ([],[])
     test_loss = ([],[])
     epoch_test_loss = 0.
-    counter = 0
-    overfit = false
+    overfit_counter = 0
+    converged_counter = 0
+    stopping = false
     t0 = time()
 
 
@@ -191,7 +200,9 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
 
         # train step: update on every batch in dataloader, batch loss is output 2
         # mean over whole dataset, append epoch & trainloss
-        epoch_train_loss = mean([Training.single_train_step!(AutoZygote(), loss_fct, (xbatch, ybatch), train_state)[2] for (xbatch, ybatch) in _batch_data(x,y,batchsize)])
+        # use custom batching function if there are problems with MLUtils
+        #epoch_train_loss = mean([Training.single_train_step!(AutoZygote(), loss_fct, (xbatch, ybatch), train_state)[2] for (xbatch, ybatch) in _batch_data(x,y,batchsize)])
+        epoch_train_loss = mean([Training.single_train_step!(AutoZygote(), loss_fct, (xbatch, ybatch), train_state)[2] for (xbatch, ybatch) in DatLoad])
         push!(train_loss[2], epoch_train_loss)
         push!(train_loss[1], i)
 
@@ -200,49 +211,61 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
             epoch_test_loss,_,_ = loss_fct(train_state.model, train_state.parameters, train_state.states, (x_test, y_test))
             push!(test_loss[2], epoch_test_loss)
             push!(test_loss[1], i+1)
-            t = time()
-            messages && println("after ", i, " epochs: time ", t-t0, " s, trainloss: ", epoch_train_loss, ", testloss (updated): ", epoch_test_loss)
+            messages && println("after ", i, " epochs: time $(_format_seconds(time()-t0)) s, trainloss: ", epoch_train_loss, ", testloss (updated): ", epoch_test_loss)
+
+            # test for fuck up - happens sometimes for bad hyperparameter choices
+            if isnan(epoch_test_loss)
+                println("model broke")
+                stopping = "broken"
+                break
+            end
+
+            # compare loss to last test to check for convergence
+            if length(test_loss[2]) >= 2
+                if test_loss[2][end]/test_loss[2][end-1] > 1.
+                    converged_counter += 1
+                else
+                    converged_counter = 0
+                end
+            end
+            # if patience is true and counter reached break
+            if patience && converged_counter >= 10
+                messages && println("model converged")
+                stopping = "converged"
+                break
+            end
+
         end
 
-        # test for fuck up - happens sometimes for bad hyperparameter choices
-        if isnan(epoch_test_loss)
-            println("model broke")
-            overfit = "broken"
-            break
-        end
         
         # compare testloss/trainloss for early stopping
         if i%update_step == 1
-            dep_rat = epoch_test_loss/epoch_train_loss
-            if dep_rat > 1.
-                counter += 1
+            if epoch_test_loss/epoch_train_loss > 1.
+                overfit_counter += 1
             else
-                counter = 0
+                overfit_counter = 0
             end
         end
-
-
         # stop if testloss > trainloss for 10 successive epochs
-        if early_stopping && counter >= 10
+        if early_stopping && overfit_counter >= 10
             messages && println("model overfitting")
-            overfit = true
+            stopping = "overfit"
             break
         end
 
+
         # update learning rate if adapt_lera is true
-        # the trainstate is reinitialized with empty optimizer state -> momentum lost
-        # THIS SHOULD BE CHANGED ONCE LUX ALLOWS TO UPDATE THE TRAINSTATE!!!!!!!!!!!!
-        if adapt_lera && i%lera_update_step==0 && i!=nepochs
+        if adapt_lera[1] && i%lera_update_step==0 && i!=nepochs
             if lera_trend isa Number
                 eta = lera_trend*train_state.optimizer.eta
                 messages && println("updating learning rate")
-                optimizer = AdamW(eta, beta, lambda)
-                train_state = Training.TrainState(train_state.model, train_state.parameters, train_state.states, optimizer)
+                Optimisers.adjust!(train_state, eta)
+                Lux.@set! train_state.optimizer = AdamW(eta, beta, lambda, couple=couple)
             elseif (lera_trend isa Tuple || lera_trend isa Vector) && i / lera_update_step + 1 <= length(lera_vector)
                 eta = lera_vector[Int(i / lera_update_step) + 1 ]
                 messages && println("updating learning rate")
-                optimizer = AdamW(eta, beta, lambda)
-                train_state = Training.TrainState(train_state.model, train_state.parameters, train_state.states, optimizer)
+                Optimisers.adjust!(train_state, eta)
+                Lux.@set! train_state.optimizer = AdamW(eta, beta, lambda, couple=couple)
             end
         end
         
@@ -250,12 +273,11 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
 
 
     # measure time needed for training
-    t1 = time()
-    tft = t1-t0
+    tft = time()-t0
 
     # calculate final loss
     out_loss,_,_ = loss_fct(train_state.model, train_state.parameters, train_state.states, (x, y))
-    messages && println("Time for training: ",  tft, "s\n initial loss: ", in_loss, " final loss: ", out_loss, " Improv: ", out_loss/in_loss, "\n")
+    messages && println("Time for training:  $(_format_seconds(tft)) s\n initial loss: ", in_loss, " final loss: ", out_loss, " Improv: ", out_loss/in_loss, "\n")
     
     # return NN structure: updated model with trained parameters
     # return trainloss: tuple with (epoch, loss) for training loss (epoch & loss as array)
@@ -263,7 +285,7 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
     # return time for training tft
 
     NN_trained = model_structure(train_state.model, train_state.parameters, train_state.states)
-    optim_mode ? ret = (NN_trained, train_loss, test_loss, tft, overfit) : ret = (NN_trained, train_loss, test_loss)
+    optim_mode ? ret = (NN_trained, train_loss, test_loss, tft, stopping) : ret = (NN_trained, train_loss, test_loss)
 
     return ret
 end

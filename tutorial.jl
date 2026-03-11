@@ -27,7 +27,7 @@ hl_weight=glorot_uniform, hl_bias=randn32);
 
 # train the model for 1000 loops
 my_NN, trainloss, testloss = train_model!(var_train_set, K_train_set, my_NN, lera=0.001, beta=(0.9,0.999),
-batchsize=500, nepochs=1000, early_stopping=false, x_test=var_test_set, y_test=K_test_set, loss_fct=MSELoss());
+batchsize=500, nepochs=1000, x_test=var_test_set, y_test=K_test_set, loss_fct=MSELoss());
 
 # plot learning curve
 pl = plot_losses(trainloss, testloss)

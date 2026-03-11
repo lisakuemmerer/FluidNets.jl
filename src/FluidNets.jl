@@ -14,6 +14,7 @@ using DataStructures
 using StatsBase
 using Fluidum
 using NearestNeighbors
+using MLUtils
 
 include("general_functions/build_model.jl")
 include("general_functions/process_data.jl")
@@ -32,7 +33,7 @@ export read_data, get_mean_std, get_mid_halfwidth, get_min_width, get_zero_absma
 export extrapolate_interpolate_kernels, Kernels
 export MyXweightLoss, MyYweightLoss, leakyrelu_grad
 export scenario_frontend_to_backend, trials, save_trials, load_trials, merge_trials, save_hyppars
-export sortby, get_options, hist_loss, plot_hyppar, hist_hyppar, plot_course_in_best_trials, hist_occurance, plot_all_hyppars, plot_correlation,  hist_correlation_occurance
+export sortby, get_options, hist_loss, plot_hyppar, hist_hyppar, plot_course_in_best_trials, hist_occurance, plot_all_hyppars, plot_correlation,  hist_correlation_occurance, loop_one_2D, loop_all_2D
 export plot_losses, plot_sorted_kernels_ptur, plot_sorted_kernels_temps, compare_kernels_ptur, compare_kernels_temps
 
 
