@@ -112,7 +112,7 @@ end
 
 # compare prediction and interpolation for 8 kernels in pt,ur given values for Tchem, Tkin
 # returns 8k for interpol, pred & ratio
-function compare_kernels_ptur(var_set, K_func, model, Tc, Tk; n=20, show_mse=false)
+function compare_kernels_ptur(var_set, K_func, model, Tc, Tk; n=100, show="both")
     var_val_set_ptur = compute_sorted_var_set(_get_range(var_set[1:2,:]), n=n)
     var_val_set_tc = transpose([Tc for i in 1:n*n])
     var_val_set_tk = transpose([Tk for i in 1:n*n])
@@ -120,19 +120,29 @@ function compare_kernels_ptur(var_set, K_func, model, Tc, Tk; n=20, show_mse=fal
     K_val_set = Kernels(var_val_set, K_func)
     K_val_NN = model(var_val_set)
 
-    Losses = [MSELoss()(K_val_NN[i,:], K_val_set[i,:]) for i in axes(K_val_NN, 1)]
-    println("Loss in each kernel for Tchem=$(Tc), Tkin=$(Tk):")
-    for i in axes(K_val_NN,1)
-        println(K_labels[i], ": ", Losses[i])
-    end
-
-    if show_mse
-        p = _plot_sorted_kernels_2d(var_val_set_ptur, (K_val_NN .-K_val_set).^2, K_labels, title="MSE between prediction and interpolation", surface=false)
+    if show=="mse"
+        p = _plot_sorted_kernels_2d(var_val_set_ptur, (K_val_NN .-K_val_set).^2, K_labels, title="MSE between prediction and interpolation")
+        println("MSE Loss in each kernel for Tchem=$(Tc), Tkin=$(Tk):")
+        for i in axes(K_val_NN,1)
+            println(K_labels[i], ": ", MSELoss()(K_val_NN[i,:], K_val_set[i,:]))
+        end
+    elseif show=="res"
+        p = _plot_sorted_kernels_2d(var_val_set_ptur, (K_val_NN .-K_val_set), K_labels, title="Residuals between prediction and interpolation")
+        println("Mean absolute residual in each kernel for Tchem=$(Tc), Tkin=$(Tk):")
+        for i in axes(K_val_NN,1)
+            println(K_labels[i], ": ", mean(abs.(K_val_NN[i,:]-K_val_set[i,:])))
+        end
+    elseif show=="rat"
+        p = _plot_sorted_kernels_2d(var_val_set_ptur, K_val_NN ./K_val_set, K_labels, title="Prediction / Interpolation");
+        println("Mean ratio pred./interpol. in each kernel for Tchem=$(Tc), Tkin=$(Tk):")
+        for i in axes(K_val_NN,1)
+            println(K_labels[i], ": ", mean(K_val_NN[i,:] ./K_val_set[i,:]))
+        end
     else
         p1 = _plot_sorted_kernels_2d(var_val_set_ptur, K_val_set, K_labels, title="True kernels");
         p2 = _plot_sorted_kernels_2d(var_val_set_ptur, K_val_NN, K_labels, title="NN kernels");
-        p3 = _plot_sorted_kernels_2d(var_val_set_ptur, K_val_NN ./K_val_set, K_labels, title="NN / true");
-        p = plot(p1,p2,p3, layout=(3,1), size=(2000,3000))
+        pprintln("Prediction vs Interpolation for Tchem=$(Tc), Tkin=$(Tk):")
+        p = plot(p1,p2, layout=(2,1), size=(2000,2000))
     end
 
     return p
@@ -141,7 +151,7 @@ end
 
 # compare prediction and interpolation for 8 kernels in Tchem, Tkin given values for pt, ur
 # returns 8k for interpol, pred & ratio
-function compare_kernels_temps(var_set, K_func, model, pt, ur; n=20, show_mse=false)
+function compare_kernels_temps(var_set, K_func, model, pt, ur; n=100, show="both")
     var_val_set_temps = compute_sorted_var_set(_get_range(var_set[3:4,:]), n=n)
     var_val_set_pt = transpose([pt for i in 1:n*n])
     var_val_set_ur = transpose([ur for i in 1:n*n])
@@ -149,19 +159,29 @@ function compare_kernels_temps(var_set, K_func, model, pt, ur; n=20, show_mse=fa
     K_val_set = Kernels(var_val_set, K_func)
     K_val_NN = model(var_val_set)
 
-    Losses = [MSELoss()(K_val_NN[i,:], K_val_set[i,:]) for i in axes(K_val_NN, 1)]
-    println("Loss in each kernel for pt=$(pt), ur=$(ur):")
-    for i in axes(K_val_NN,1)
-        println(K_labels[i], ": ", Losses[i])
-    end
-
-    if show_mse
-        p = _plot_sorted_kernels_2d(var_val_set_temps, (K_val_NN .-K_val_set).^2, K_labels, title="MSE between prediction and interpolation", surface=false)
+    if show=="mse"
+        p = _plot_sorted_kernels_2d(var_val_set_temps, (K_val_NN .-K_val_set).^2, K_labels, title="MSE between prediction and interpolation")
+        println("MSE Loss in each kernel for pt=$(pt), ur=$(ur):")
+        for i in axes(K_val_NN,1)
+            println(K_labels[i], ": ", MSELoss()(K_val_NN[i,:], K_val_set[i,:]))
+        end
+    elseif show=="res"
+        p = _plot_sorted_kernels_2d(var_val_set_temps, (K_val_NN .-K_val_set), K_labels, title="Residuals between prediction and interpolation")
+        println("Mean absolute residual in each kernel for pt=$(pt), ur=$(ur):")
+        for i in axes(K_val_NN,1)
+            println(K_labels[i], ": ", mean(abs.(K_val_NN[i,:]-K_val_set[i,:])))
+        end
+    elseif show=="rat"
+        p = _plot_sorted_kernels_2d(var_val_set_temps, K_val_NN ./K_val_set, K_labels, title="Prediction / Interpolation");
+        println("Mean ratio pred./interpol. in each kernel for pt=$(pt), ur=$(ur):")
+        for i in axes(K_val_NN,1)
+            println(K_labels[i], ": ", mean(K_val_NN[i,:] ./K_val_set[i,:]))
+        end
     else
         p1 = _plot_sorted_kernels_2d(var_val_set_temps, K_val_set, K_labels, title="True kernels");
         p2 = _plot_sorted_kernels_2d(var_val_set_temps, K_val_NN, K_labels, title="NN kernels");
-        p3 = _plot_sorted_kernels_2d(var_val_set_temps, K_val_NN ./K_val_set, K_labels, title="NN / true");
-        p = plot(p1,p2,p3, layout=(3,1), size=(2000,3000))
+        println("Prediction vs Interpolation for pt=$(pt), ur=$(ur):")
+        p = plot(p1,p2, layout=(2,1), size=(2000,2000))
     end
 
     return p

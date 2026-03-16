@@ -28,7 +28,7 @@ include("customized_scripts/minifluidum.jl")
 
 
 
-export model_structure, model_structures, initiate_model, train_model!, reprocess_model, save_model, load_model
+export model_structure, model_structures, initiate_model, train_model!, reprocess_model, save_model, load_model, save_losses, load_losses
 export read_data, get_mean_std, get_mid_halfwidth, get_min_width, get_zero_absmax, preprocess, get_train_test_set
 export extrapolate_interpolate_kernels, Kernels
 export MyXweightLoss, MyYweightLoss, leakyrelu_grad

@@ -9,11 +9,11 @@ BLAS.set_num_threads(1)
 # the 'trial' function will be called for different options defined below by the 'trials' function
 
 # path to where your dataset
-in_file = "/home/lisa/MA/Data/Full_PCE/Kernels/pion_total_m0.txt";
+in_file = "/home/lisa/MA/Data/Full_PCE/Kernels/pion_total_BG.txt";
 # path to where you want to save output
-out_path = "/home/lisa/MA/Final/hyperopt/pion_total_m0/";
+out_path = "/home/lisa/MA/Final/hyperopt/test/";
 #number of variables & Kernels
-var_dim, K_dim = 4, 52;
+var_dim, K_dim = 4, 8;
 
 
 ################################################################################################################
@@ -47,10 +47,8 @@ scens = Dict{Symbol, Any}(:prep_vars => ["none", "minwidth", "midhalfwidth", "me
 
 # # DO NOT UNCOMMENT UNLESS WANTED, RUNS FOR MULTIPLE HOURS !!!
 # # function will call trial-function and run #num_trials options from scen without excepts
-trial_all = trials(scens, var_set, K_set, num_trials=80);
+trial_all = trials(scens, var_set, K_set, num_trials=100);
 
-
-count(t->t[:overfit]=="broken", trial_all)
 
 # save the trials to file with random name so that script can be rerun
 save_trials(trial_all, savepath=out_path)

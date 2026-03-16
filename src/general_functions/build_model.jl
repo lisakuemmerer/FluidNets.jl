@@ -154,12 +154,12 @@ end
 # lera=learning rate, beta,lambda,couple=AdamW parameters,
 # adapt_lera=true if learning rate should be adapted, lera_update_step=number of epochs after which learning rate is updated,
 # lera_trend=trend of learning rate. options:
-# ---scalar: 0.999 for 0.1% decrease every #lera_update_steps epochs
+# ---scalar: i.e. 0.999 for 0.1% decrease every #lera_update_steps epochs; stops at 1e-5
 # ---tuple: ("lin" or "log", end, steps) will give #"steps" between "lera" and "end" with linear/logarithmic spacing
 # ---vector: custom vector, i.e 10.^LinRange(-2,-4,100) for logarithmic decrease. start should coincide with lera
 # --- fot tuple/vector: the last value will be repeated for the remaining training if n_epochs > lera_update_step*lngth(lera_vector)
 # early_stopping=true if training should stop if test loss > train loss for 10 instances
-# patience=true if training should stop if testloss increases for 10 instances
+# patience=true if training should stop if testloss does not decrease (0.99) for 10 instances
 # messages = true if messages should be printed, optim_mode = true for more output values
 function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=1000, 
     update_step=10, lera=0.001, beta=(0.9,0.999), lambda=0., couple=true,
@@ -193,82 +193,102 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
     overfit_counter = 0
     converged_counter = 0
     stopping = false
+    stop_requested = false
     t0 = time()
 
 
     for i in 1:nepochs
+        # let run on background to enable ustom stop
+        t = Threads.@spawn begin
 
-        # train step: update on every batch in dataloader, batch loss is output 2
-        # mean over whole dataset, append epoch & trainloss
-        # use custom batching function if there are problems with MLUtils
-        #epoch_train_loss = mean([Training.single_train_step!(AutoZygote(), loss_fct, (xbatch, ybatch), train_state)[2] for (xbatch, ybatch) in _batch_data(x,y,batchsize)])
-        epoch_train_loss = mean([Training.single_train_step!(AutoZygote(), loss_fct, (xbatch, ybatch), train_state)[2] for (xbatch, ybatch) in DatLoad])
-        push!(train_loss[2], epoch_train_loss)
-        push!(train_loss[1], i)
+            # train step: update on every batch in dataloader, batch loss is output 2
+            # mean over whole dataset, append epoch & trainloss
+            # use custom batching function if there are problems with MLUtils
+            #epoch_train_loss = mean([Training.single_train_step!(AutoZygote(), loss_fct, (xbatch, ybatch), train_state)[2] for (xbatch, ybatch) in _batch_data(x,y,batchsize)])
+            epoch_train_loss = mean([Training.single_train_step!(AutoZygote(), loss_fct, (xbatch, ybatch), train_state)[2] for (xbatch, ybatch) in DatLoad])
+            push!(train_loss[2], epoch_train_loss)
+            push!(train_loss[1], i)
 
-        # test on testset
-        if i%update_step == 0
-            epoch_test_loss,_,_ = loss_fct(train_state.model, train_state.parameters, train_state.states, (x_test, y_test))
-            push!(test_loss[2], epoch_test_loss)
-            push!(test_loss[1], i+1)
-            messages && println("after ", i, " epochs: time $(_format_seconds(time()-t0)) s, trainloss: ", epoch_train_loss, ", testloss (updated): ", epoch_test_loss)
+            # test on testset
+            if i%update_step == 0
+                epoch_test_loss,_,_ = loss_fct(train_state.model, train_state.parameters, train_state.states, (x_test, y_test))
+                push!(test_loss[2], epoch_test_loss)
+                push!(test_loss[1], i+1)
+                messages && println("after ", i, " epochs: time $(_format_seconds(time()-t0)) s, trainloss: ", epoch_train_loss, ", testloss (updated): ", epoch_test_loss)
 
-            # test for fuck up - happens sometimes for bad hyperparameter choices
-            if isnan(epoch_test_loss)
-                println("model broke")
-                stopping = "broken"
-                break
+                # test for fuck up - happens sometimes for bad hyperparameter choices
+                if isnan(epoch_test_loss)
+                    println("model broke")
+                    stopping = "broken"
+                    return # Exit task
+                end
+
+                # compare loss to last test to check for convergence
+                if length(test_loss[2]) >= 2
+                    if test_loss[2][end]/test_loss[2][end-1] > 0.99
+                        converged_counter += 1
+                    else
+                        converged_counter = 0
+                    end
+                end
+                # if patience is true and counter reached break
+                if patience && converged_counter >= 10
+                    messages && println("model converged")
+                    stopping = "converged"
+                    return # Exit task
+                end
+
             end
 
-            # compare loss to last test to check for convergence
-            if length(test_loss[2]) >= 2
-                if test_loss[2][end]/test_loss[2][end-1] > 1.
-                    converged_counter += 1
+            
+            # compare testloss/trainloss for early stopping
+            if i%update_step == 1
+                if epoch_test_loss/epoch_train_loss > 1.
+                    overfit_counter += 1
                 else
-                    converged_counter = 0
+                    overfit_counter = 0
                 end
             end
-            # if patience is true and counter reached break
-            if patience && converged_counter >= 10
-                messages && println("model converged")
-                stopping = "converged"
-                break
+            # stop if testloss > trainloss for 10 successive epochs
+            if early_stopping && overfit_counter >= 10
+                messages && println("model overfitting")
+                stopping = "overfit"
+                return # Exit task
             end
 
-        end
 
-        
-        # compare testloss/trainloss for early stopping
-        if i%update_step == 1
-            if epoch_test_loss/epoch_train_loss > 1.
-                overfit_counter += 1
-            else
-                overfit_counter = 0
+            # update learning rate if adapt_lera is true
+            if adapt_lera[1] && i%lera_update_step==0 && i!=nepochs && train_state.optimizer.eta >= 1e-5
+                if lera_trend isa Number
+                    eta = lera_trend*train_state.optimizer.eta
+                    messages && println("updating learning rate")
+                    Optimisers.adjust!(train_state, eta)
+                    Lux.@set! train_state.optimizer = AdamW(eta, beta, lambda, couple=couple)
+                elseif (lera_trend isa Tuple || lera_trend isa Vector) && i / lera_update_step + 1 <= length(lera_vector)
+                    eta = lera_vector[Int(i / lera_update_step) + 1 ]
+                    messages && println("updating learning rate")
+                    Optimisers.adjust!(train_state, eta)
+                    Lux.@set! train_state.optimizer = AdamW(eta, beta, lambda, couple=couple)
+                end
             end
         end
-        # stop if testloss > trainloss for 10 successive epochs
-        if early_stopping && overfit_counter >= 10
-            messages && println("model overfitting")
-            stopping = "overfit"
+        # redirect stop with "ctrl + c" to let it finish a started iteration and break training after loop
+        try
+            wait(t)
+        catch e
+            e isa InterruptException || rethrow()
+            println("\nStop requested. Finishing current iteration...")
+            stop_requested = true
+            wait(t)
+        end
+        if stop_requested
+            println("Stopping after iteration $i")
             break
         end
-
-
-        # update learning rate if adapt_lera is true
-        if adapt_lera[1] && i%lera_update_step==0 && i!=nepochs
-            if lera_trend isa Number
-                eta = lera_trend*train_state.optimizer.eta
-                messages && println("updating learning rate")
-                Optimisers.adjust!(train_state, eta)
-                Lux.@set! train_state.optimizer = AdamW(eta, beta, lambda, couple=couple)
-            elseif (lera_trend isa Tuple || lera_trend isa Vector) && i / lera_update_step + 1 <= length(lera_vector)
-                eta = lera_vector[Int(i / lera_update_step) + 1 ]
-                messages && println("updating learning rate")
-                Optimisers.adjust!(train_state, eta)
-                Lux.@set! train_state.optimizer = AdamW(eta, beta, lambda, couple=couple)
-            end
+        if stopping !== false
+            messages && println("Stopping loop (reason: $stopping)")
+            break
         end
-        
     end
 
 
@@ -290,9 +310,9 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
     return ret
 end
 
-
 # adds input & output layers as repreprocessing accoring to  used preprocessing parameters
 # NN: trained NN, var_prep_pars&K_prep_pars: preprocessing parameters as returned by get_train_test_set
+
 function reprocess_model(NN_unprep; var_prep_pars=nothing, K_prep_pars=nothing)
     m = NN_unprep.model
     p = NN_unprep.parameters
@@ -325,6 +345,20 @@ function reprocess_model(NN_unprep; var_prep_pars=nothing, K_prep_pars=nothing)
 end
 
 
+
+# save and load loss arrays
+function save_losses(trainloss, testloss, filename)
+    open(filename, "w") do io
+        writedlm(io, trainloss)
+        writedlm(io, testloss)
+    end
+end
+function load_losses(filename)
+    t = readdlm(filename)
+    trainloss = [Int.(t[1,:]), t[2,:]]
+    testloss = [Int.(filter(t->t!="", t[3,:])), filter(t->t!="", t[4,:])]
+    return trainloss, testloss
+end
 
 
 
