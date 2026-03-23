@@ -110,6 +110,45 @@ end
 
 
 ##############################################################################################################
+# custom learning rate schedule functions
+
+# linear descend starting from "start" with slope constant "red"/ reduce to "fin" after "pts"
+linear(start, red) = x -> start - red*(x-1)
+linear(start, fin, pts) =  x -> start - (start-fin)/(pts-1)*(x-1)
+
+# exponential decay starting at "start"  with reduction = remaining percentage 
+# (red=0.99 will reduce to 99% every step. for reduction to 99% every 10 steps put red = 0.99^(1/10) )
+exponential(start, red) =  x -> start*red^(x-1)
+
+# logarithmic decay starting from "start" reducing to "fin" after "pts"
+logarithmic(start, fin, pts) =  x -> log10(pts/x)/log10(pts) * (start-fin) + fin
+
+# cosine starting at "start" reducing to "fin" after "pts"
+# should be used wiith repeat, otherwise schedule will increase learning rate after "pts"
+cosine(start, fin, pts) =  x -> cos((x-1)/(pts-1)*pi) * (start-fin)/2 + (start+fin)/2
+# should be used wiith repeat, otherwise schedule will increase learning rate after "pts"
+
+# function that allows to stop function from propagating
+# stop_on_value = false: for x>stop the value f(stop) will be repeated. useful to stop cosine after "pts"
+# stop_on_value = true: returns "stop" instead of f(x) if f(x) is smaller. useful to keep linear with reduction from decreasing below certain value
+function stop_function(f, x, stop, stop_on_value)
+    if stop_on_value
+        y = f(x)>=stop ? f(x) : stop
+    else
+        y = x<=stop ? f(x) : f(stop)
+    end
+    return y
+end
+stopped_function(f, stop; stop_on_value=false) = x-> stop_function(f, x, stop, stop_on_value)
+
+#cosine that repeats last value after "pts"
+stopped_cosine(start, fin, pts) = stopped_function(cosine(start, fin, pts), pts)
+
+
+
+
+
+##############################################################################################################
 # build & train & reprocess & save model
 
 
@@ -154,30 +193,17 @@ end
 # lera=learning rate, beta,lambda,couple=AdamW parameters,
 # adapt_lera=true if learning rate should be adapted, lera_update_step=number of epochs after which learning rate is updated,
 # lera_trend=trend of learning rate. options:
-# ---scalar: i.e. 0.999 for 0.1% decrease every #lera_update_steps epochs; stops at 1e-5
-# ---tuple: ("lin" or "log", end, steps) will give #"steps" between "lera" and "end" with linear/logarithmic spacing
-# ---vector: custom vector, i.e 10.^LinRange(-2,-4,100) for logarithmic decrease. start should coincide with lera
-# --- fot tuple/vector: the last value will be repeated for the remaining training if n_epochs > lera_update_step*lngth(lera_vector)
+# ---scalar: i.e. 0.999 for 0.1% decrease every #lera_update_steps epochs
+# ---vector: custom vector, i.e 10.^LinRange(-3,-5,1000) for logarithmic decrease. start should coincide with lera. the last value will be repeated for the remaining training if n_epochs > lera_update_step*length(lera_vector)
+# ---function: custom function depending on epoch i, i.e. cosine, log, exp...
 # early_stopping=true if training should stop if test loss > train loss for 10 instances
-# patience=true if training should stop if testloss does not decrease (0.99) for 10 instances
+# patience = true if training should stop if testloss does not decrease (0.99) for 10 instances
 # messages = true if messages should be printed, optim_mode = true for more output values
 function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=1000, 
     update_step=10, lera=0.001, beta=(0.9,0.999), lambda=0., couple=true,
     adapt_lera=false, lera_update_step=10, lera_trend=0.999,
     loss_fct=MSELoss(), early_stopping=true, patience=true, messages=true, optim_mode=false)
-
-    #build leraning rate vector if lera_trend is a tuple
-    if adapt_lera==true && lera_trend isa Tuple
-        if lera_trend[1]=="lin"
-            lera_vector = reverse(LinRange(lera_trend[2], lera, lera_trend[3]))
-        elseif lera_trend[1] == "log"
-            lera_vector = 10 .^LinRange(log10(lera), log10(lera_trend[2]), lera_trend[3])
-        end
-    elseif adapt_lera==true && lera_trend isa Vector
-        lera_vector = lera_trend
-    end
-
-
+    
     # build trainstate according to Lux training
     DatLoad = DataLoader((x,y), batchsize=batchsize, partial=false, shuffle=true) # from MLUtils; do not use on Slurm, f***s up everything
     train_state = Training.TrainState(NN_init.model, NN_init.parameters, NN_init.states, AdamW(lera,beta, lambda, couple=couple))
@@ -258,13 +284,19 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
 
 
             # update learning rate if adapt_lera is true
-            if adapt_lera[1] && i%lera_update_step==0 && i!=nepochs && train_state.optimizer.eta >= 1e-5
+            #  && train_state.optimizer.eta >= 1e-5
+            if adapt_lera && i%lera_update_step==0 && i!=nepochs
                 if lera_trend isa Number
                     eta = lera_trend*train_state.optimizer.eta
                     messages && println("updating learning rate")
                     Optimisers.adjust!(train_state, eta)
                     Lux.@set! train_state.optimizer = AdamW(eta, beta, lambda, couple=couple)
-                elseif (lera_trend isa Tuple || lera_trend isa Vector) && i / lera_update_step + 1 <= length(lera_vector)
+                elseif lera_trend isa Function
+                    eta = lera_trend(i)
+                    messages && println("updating learning rate")
+                    Optimisers.adjust!(train_state, eta)
+                    Lux.@set! train_state.optimizer = AdamW(eta, beta, lambda, couple=couple)
+                elseif lera_trend isa Vector && i / lera_update_step + 1 <= length(lera_vector)
                     eta = lera_vector[Int(i / lera_update_step) + 1 ]
                     messages && println("updating learning rate")
                     Optimisers.adjust!(train_state, eta)
@@ -272,6 +304,8 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
                 end
             end
         end
+
+
         # redirect stop with "ctrl + c" to let it finish a started iteration and break training after loop
         try
             wait(t)
