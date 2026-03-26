@@ -143,12 +143,12 @@ function _trial(scen_frt, var_set, K_set; deepsave=false)
 
     scen = scenario_frontend_to_backend(scen_frt, var_set, K_set)
 
-    var_train_set, K_train_set, var_test_set, K_test_set, _, _ = get_train_test_set(var_set, K_set,
+    var_train_set, K_train_set, var_test_set, K_test_set, _, _ = get_train_test_set(var_set, K_set, uniform=true,
     preprocess_vars=scen[:prep_vars], preprocess_K=scen[:prep_K], n_train=10000, n_test=10000);
     my_NN = initiate_model(var_dim, K_dim, nb_hl=scen[:nb_hl], hl_dim=scen[:hl_dim], act_fct=scen[:act_fct], hl_weight=scen[:initializer_weight], hl_bias=scen[:initializer_bias]);
     my_NN, trainloss, testloss, tft, overfit = train_model!(var_train_set, K_train_set, my_NN, 
     batchsize=scen[:batchsize], loss_fct=MSELoss(), lera=scen[:lera], beta=(scen[:beta1],scen[:beta2]), lambda=scen[:lambda], 
-    nepochs=1000, x_test=var_test_set, y_test=K_test_set, optim_mode=true, messages=false);
+    nepochs=1000, x_test=var_test_set, y_test=K_test_set, early_stopping=10, patience=10, optim_mode=true, messages=false);
 
     # return: dictionary containing used hyperparameters, time for training, testloss, and model_overfit
     dict = OrderedDict{Symbol,Any}(k=>v for (k,v) in scen_frt)

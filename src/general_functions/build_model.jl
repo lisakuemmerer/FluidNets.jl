@@ -157,7 +157,7 @@ stopped_cosine(start, fin, pts) = stopped_function(cosine(start, fin, pts), pts)
 # act_fct=activation function for hidden layers, out_act_fct=activation function for output layer, 
 # param64=convert parameters to Float64, 
 # hl_weight, hl_bias, inp_weight, inp_bias, out_weight, out_bias=initialization of weights and biases in respective layers. for hidden layers the function includes automatic computation of gain
-function initiate_model(inp_dim, out_dim; nb_hl=5, hl_dim=32, act_fct=relu, in_act_fct=identity, out_act_fct=identity, param64=true,
+function initiate_model(inp_dim, out_dim; nb_hl=5, hl_dim=32, act_fct=relu, in_act_fct=identity, out_act_fct=identity, param64=true, dropout=false, dropout_prob = 0.1,
                     hl_weight=nothing, hl_bias=nothing, inp_weight=nothing, inp_bias=nothing, out_weight=nothing, out_bias=nothing)
 
     # make sure weigts are initialized according to activation function
@@ -165,10 +165,11 @@ function initiate_model(inp_dim, out_dim; nb_hl=5, hl_dim=32, act_fct=relu, in_a
     inp_weight isa InitswithgainTypes && in_act_fct isa ActfctswithgainTypes && (inp_weight = _initializer_gain(inp_weight, in_act_fct))
     out_weight isa InitswithgainTypes && out_act_fct isa ActfctswithgainTypes && (out_weight = _initializer_gain(out_weight, out_act_fct))
 
-    # make chain of hidden layers
+    # make chain of hidden layers and dropout layers (if dropout=true)
     hidden_layers = []
     for i in 1:nb_hl
         push!(hidden_layers, Dense(hl_dim=>hl_dim, act_fct, init_weight=hl_weight, init_bias=hl_bias))
+        dropout==true && push!(hidden_layers, Dropout(dropout_prob))
     end
     # model: input layer, hidden layers, output layer
     model = Chain(Dense(inp_dim=>hl_dim, in_act_fct, init_weight=inp_weight, init_bias=inp_bias), 
@@ -188,21 +189,23 @@ end
 
 
 # train model on dataset x=variables, y=true Kernels, NN_init as initialized by initiate_model
-# x_test, y_test = independent test set, batchsize=number of datapoints in one batch, nepochs=number of epochs to train,
-# update_step=number of epochs after which test loss is calculated, loss_fct=loss function to use, 
+# x_test, y_test = independent test set, 
+# batchsize=number of datapoints in one batch, 
+# nepochs=number of epochs to train,
+# update_step=number of epochs after which test loss is calculated, 
+# loss_fct=loss function to use, 
 # lera=learning rate, beta,lambda,couple=AdamW parameters,
-# adapt_lera=true if learning rate should be adapted, lera_update_step=number of epochs after which learning rate is updated,
-# lera_trend=trend of learning rate. options:
-# ---scalar: i.e. 0.999 for 0.1% decrease every #lera_update_steps epochs
-# ---vector: custom vector, i.e 10.^LinRange(-3,-5,1000) for logarithmic decrease. start should coincide with lera. the last value will be repeated for the remaining training if n_epochs > lera_update_step*length(lera_vector)
+# adapt_lera: Int or false. if Int: after ... epochs learning rate will be adapted, according to lera_trend
+# ---scalar: i.e. 0.999 for 0.1% decrease every #adapt_lera epoch
+# ---vector: custom vector, i.e 10.^LinRange(-3,-5,1000) for logarithmic decrease. start should coincide with lera. the last value will be repeated for the remaining training if n_epochs > adatpt_lera*length(lera_vector)
 # ---function: custom function depending on epoch i, i.e. cosine, log, exp...
-# early_stopping=true if training should stop if test loss > train loss for 10 instances
-# patience = true if training should stop if testloss does not decrease (0.99) for 10 instances
+# early_stopping: Int or false. if Int: will stop training if testloss > trainloss for ... instances
+# patience: Int or false. if Int: stop training when testloss deos not decrease (less than 0.99) for ... instances
 # messages = true if messages should be printed, optim_mode = true for more output values
 function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=1000, 
     update_step=10, lera=0.001, beta=(0.9,0.999), lambda=0., couple=true,
-    adapt_lera=false, lera_update_step=10, lera_trend=0.999,
-    loss_fct=MSELoss(), early_stopping=true, patience=true, messages=true, optim_mode=false)
+    adapt_lera=false, lera_trend=0.999,
+    loss_fct=MSELoss(), early_stopping=false, patience=false, messages=true, optim_mode=false)
     
     # build trainstate according to Lux training
     DatLoad = DataLoader((x,y), batchsize=batchsize, partial=false, shuffle=true) # from MLUtils; do not use on Slurm, f***s up everything
@@ -244,7 +247,6 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
 
                 # test for fuck up - happens sometimes for bad hyperparameter choices
                 if isnan(epoch_test_loss)
-                    println("model broke")
                     stopping = "broken"
                     return # Exit task
                 end
@@ -258,8 +260,7 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
                     end
                 end
                 # if patience is true and counter reached break
-                if patience && converged_counter >= 10
-                    messages && println("model converged")
+                if patience!=false && converged_counter >= patience
                     stopping = "converged"
                     return # Exit task
                 end
@@ -276,8 +277,7 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
                 end
             end
             # stop if testloss > trainloss for 10 successive epochs
-            if early_stopping && overfit_counter >= 10
-                messages && println("model overfitting")
+            if early_stopping!=false && overfit_counter >= early_stopping
                 stopping = "overfit"
                 return # Exit task
             end
@@ -285,7 +285,7 @@ function train_model!(x, y, NN_init; x_test=x, y_test=y, batchsize=500, nepochs=
 
             # update learning rate if adapt_lera is true
             #  && train_state.optimizer.eta >= 1e-5
-            if adapt_lera && i%lera_update_step==0 && i!=nepochs
+            if adapt_lera!=false && i%adapt_lera==0 && i!=nepochs
                 if lera_trend isa Number
                     eta = lera_trend*train_state.optimizer.eta
                     messages && println("updating learning rate")
@@ -400,7 +400,7 @@ end
 # OTHER STUFF: kernelwise ( might not work anymore ? )
 
 
-function NN_kernelwise(var_train_set, K_train_set, nb_hl, hl_dim; lera=0.001, beta1=0.9, beta2=0.999, lambda=0., loss_fct=MSELoss(), act_fct=leakyrelu, batchsize=500, nepochs=100, update_step=10, x_test=var_train_set, y_test=K_train_set, adapt_lera=false,  lera_trend=0.999, lera_update_step=10, early_stopping=true, messages=true)
+function NN_kernelwise(var_train_set, K_train_set, nb_hl, hl_dim; lera=0.001, beta1=0.9, beta2=0.999, lambda=0., loss_fct=MSELoss(), act_fct=leakyrelu, batchsize=500, nepochs=100, update_step=10, x_test=var_train_set, y_test=K_train_set, adapt_lera=100,  lera_trend=0.999,  early_stopping=100, patience=100, messages=true)
     ti = time()
     var_dim = size(var_train_set)[1]
     K_dim = size(K_train_set)[1]
@@ -422,7 +422,7 @@ function NN_kernelwise(var_train_set, K_train_set, nb_hl, hl_dim; lera=0.001, be
         messages && println("\n Kernel ", i, ":")
         m,p,s = initiate_model(var_dim, 1, nb_hl=nb_hl[i], hl_dim=hl_dim[i], act_fct=act_fct)
         trs,trl,tel = train_model!(var_train_set, reshape(K_train_set[i,:],1,:), model_structure(m,p,s), x_test=x_test, y_test=reshape(y_test[i,:],1,:),
-        loss_fct=loss_fct, lera=lera[i], beta=(beta1[i],beta2[i]),lambda=lambda[i], batchsize=batchsize, nepochs=nepochs, update_step=update_step,  adapt_lera=adapt_lera, lera_trend=lera_trend, lera_update_step=lera_update_step, early_stopping=early_stopping, messages=messages)
+        loss_fct=loss_fct, lera=lera[i], beta=(beta1[i],beta2[i]),lambda=lambda[i], batchsize=batchsize, nepochs=nepochs, update_step=update_step,  adapt_lera=adapt_lera, lera_trend=lera_trend, early_stopping=early_stopping, patience=patience, messages=messages)
         push!(TRS, trs)
         push!(TRL, trl)
         push!(TEL, tel)

@@ -195,13 +195,14 @@ end
 # if the variable grid is not even, but the samples should be uniform, choose uniform=true
 # preprocessing can be false (no prep) or a tuple with preprocessing parameters as given to preprocess()
 # returns train & test sets for variables & kernels, as well as used preprocessing parameters
-function get_train_test_set(var_set, K_set; preprocess_vars=false, preprocess_K=false, n_train=10000, n_test=10000, uniform=true)
+function get_train_test_set(var_set, K_set; preprocess_vars=false, preprocess_K=false, n_train=10000, n_test=10000, uniform=false)
 
+    n_train+n_test>=size(var_set,2) && @error "requested samples to big"
+    
     if uniform
         n_train+n_test>=size(var_set,2)/5 && @warn "requested sample not uniform"
         ind = _uniform_subset(var_set, n_train+n_test)
     else
-        n_train+n_test>=size(var_set,2) && @error "requested samples to big"
         ind = shuffle(axes(var_set,2))[1:n_train+n_test]
     end
 
