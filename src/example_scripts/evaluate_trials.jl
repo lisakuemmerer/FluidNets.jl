@@ -4,7 +4,7 @@ Trials = load_trials("/home/lisa/MA/Final/hyperopt/pion_total/trial_all.jld2");
 
 
 # get hyppars & results
-results = [:endloss, :improv, :tft, :overfit];
+results = [:endloss, :improv, :tft, :stopping];
 hyppars = [h for h in filter(!(k->k in results || k==:loss_fct), keys(first(Trials)))];
 scen = get_options(Trials, hyppars)
 
